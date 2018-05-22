@@ -69,9 +69,9 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="translate data from japanese to english")
 
-	parser.add_argument("--input_dir", type=str, default="data",)
-	parser.add_argument("--output_dir", type=str, default="data_translated")
-	parser.add_argument("--documentation_dir", type=str, default="data/documentation")
+	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data",)
+	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_translated")
+	parser.add_argument("--documentation_dir", type=str, default="../datasets/Ponpare/data/documentation")
 	args = parser.parse_args()
 
 	translate(args.input_dir, args.output_dir, args.documentation_dir)

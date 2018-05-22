@@ -109,8 +109,8 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="create validation sets based on a given testing period")
 
-	parser.add_argument("--input_dir", type=str, default="data_translated",)
-	parser.add_argument("--output_dir", type=str, default="data_processed")
+	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_translated",)
+	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_processed")
 	parser.add_argument("--testing_period", type=int, default=7)
 	args = parser.parse_args()
 

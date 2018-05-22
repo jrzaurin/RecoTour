@@ -196,8 +196,8 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="build interaction datasets")
 
-	parser.add_argument("--input_dir", type=str, default="data_processed")
-	parser.add_argument("--output_dir", type=str, default="data_processed")
+	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_processed")
+	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_processed")
 
 	args = parser.parse_args()
 
