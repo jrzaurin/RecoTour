@@ -66,8 +66,7 @@ def user_features(inp_dir, out_dir):
 	inactive_users = np.setdiff1d(list(df_users_train.user_id_hash.unique()), active_users)
 	# 66 inactive_users
 
-	# let's focus on active users that have not withdrawn. For convenience we use
-	# abbreviated names:
+	# let's focus on active users. For convenience we use abbreviated names:
 
 	# df_users_train_active (df_utr)
 	df_utr = df_users_train[~df_users_train.user_id_hash.isin(inactive_users)]
@@ -211,7 +210,7 @@ def user_features(inp_dir, out_dir):
 	# capsule_text_cat and genre_name_cat.
 
 	# remove purchases from the visits data because we will build features
-	# separately for purchases and visits
+	# separately for purchased and visits
 	df_vtr_visits = df_vtr.copy()
 	df_vtr_visits['activity_hash'] = df_vtr_visits['user_id_hash'] + "_" + df_vtr_visits['view_coupon_id_hash']
 	purchases = df_vtr_visits[~df_vtr_visits.purchaseid_hash.isna()]['activity_hash'].unique()
@@ -277,16 +276,21 @@ def user_features(inp_dir, out_dir):
 	final_list_of_dfs = [df_user_feat_d, df_user_feat_c, df_user_feat_v, df_user_feat_p]
 	df_user_feat = reduce(lambda left,right: pd.merge(left,right,on=['user_id_hash'],how='outer'), final_list_of_dfs)
 
-	# there are 116 users in training that visit but never bought. For them all
-	# columns in df_user_feat_p will be -1
+	# there are 116 users in training that visit but never bought:
+	# df_utr[(df_utr.user_id_hash.isin(df_vtr.user_id_hash)) & \
+	# (~df_utr.user_id_hash.isin(df_ptr.user_id_hash))].shape
+
+	# For them all columns in df_user_feat_p will be -1
 	for c in df_user_feat.columns[1:]:
 		if 'cat' in c:
 			cat_label = df_user_feat[c].max() + 1
 			df_user_feat[c] = df_user_feat[c].fillna(cat_label).astype('int')
 		else:
 			df_user_feat[c].fillna(-1, inplace=True)
-	# There are 18 users that are in active_users but not in df_user_feat. This is
-	# because these users are not in df_users_train
+	# There are 18 users that are in active_users but not in df_user_feat:
+	# np.setdiff1d(active_users, df_users_train.user_id_hash.unique()).size
+
+	# This is because these users are not in df_users_train
 
 	# note that the "train" is redundant here. Unlike coupons, there will not be
 	# user_feat_test in this excercise.

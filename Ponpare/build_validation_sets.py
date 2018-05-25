@@ -5,25 +5,20 @@ import os
 
 # this is the way we will design the experiment:
 
-# 1-. INTERACTIONS: we will define a training and validation periods based on
+# 1-. INTERACTIONS: we will define training and validation sets for
 # interactions -> visits and purchaes
 
-# 2-. COUPONS: To reproduce a real scenario in which a bunch of new coupons
-# will be displayed at a certain moment in time we will use for training ONLY
-# coupons that were displayed during training. In the competition we are
-# provided with the test coupons. This suggest that we can use ALL coupons to
-# engineer the features and the split into training and testing coupons.
-# Nonetheless, we will also explore the possibility where new coupons have
-# never seen before, we need to recommend on the fly, and there is a
-# possibility that there are new features in those coupons. In this case, we
-# would need to recommend based on some similarity function between new and
-# already-seen coupons
+# 2-. COUPONS: based on the testing set they provide in the competition,
+# testing coupons are selected based on dispfrom and are displayed for a week.
+# The fact that they provided with features for the testing coupons suggest
+# that we can use ALL coupons to engineer the features and the split into
+# training and testing coupons. Nonetheless, we will also explore the
+# possibility where new coupons have never seen before, we need to recommend
+# on the fly, and there is a possibility that there are new features in those
+# coupons. In this case, we would need to recommend based on some similarity
+# function between new and already-seen coupons
 
-# 3-. USERS: Similarly for users, we will concentrate in users that have been
-# seen during training. Again, we will consider the possibility that new users
-# appear and we have to recommend. In this case, we will again use a
-# similarity  function and we will recommend based on similar users that
-# registered before.
+# 3-. USERS: We will concentrate in users that have been seen during training.
 
 def build_validation_sets(inp_dir, out_dir, tp):
 
@@ -49,7 +44,7 @@ def build_validation_sets(inp_dir, out_dir, tp):
 	# Here we want to explore different recommendation algorithms. Therefore,
 	# for the purposes of this excercise we can ignore the 310 coupons that
 	# are provided in the kaggle competition as part of the testing set, since
-	# we want to know how good are we recommending.  We will divide the time
+	# we want to know how good are we recommending. We will divide the time
 	# period in train, validation and testing
 	df_interactions = [df_visits, df_purchases]
 	most_recent = []
@@ -67,6 +62,7 @@ def build_validation_sets(inp_dir, out_dir, tp):
 	df_purchases['days_to_present'] = (tmp_df_detail['present'] - df_purchases['i_date'])
 	df_purchases['days_to_present'] = df_purchases.days_to_present.dt.days
 
+	# In reality, for most examples, we will just use users seen in training
 	tmp_df_users = pd.DataFrame({'present': [present]*df_users.shape[0]})
 	df_users['days_to_present'] = (tmp_df_users['present'] - df_users['reg_date'])
 	df_users['days_to_present'] = df_users.days_to_present.dt.days
@@ -89,8 +85,6 @@ def build_validation_sets(inp_dir, out_dir, tp):
 		lambda x: 0 if x<=tp-1 else 1 if ((x>tp-1) and (x<=(tp*2)-1)) else 2)
 
 	df_l = ['df_visits', 'df_purchases', 'df_users', 'df_coupons']
-
-	#
 	for df in df_l:
 		print('INFO: splitting {}'.format(df.split('_')[1]))
 		tmp_train = eval(df)[eval(df)['days_to_present_flag'] == 2]

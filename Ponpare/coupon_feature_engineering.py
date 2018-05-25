@@ -124,6 +124,10 @@ def coupon_features(inp_dir, out_dir):
 	drop_cols = le_cols + ['dispfrom', 'dispend', 'validfrom', 'validend', 'days_to_present']
 	df_coupons.drop(drop_cols, axis=1, inplace=True)
 
+	# for convenience later, let's add the suffix "cat" to usable_date columns
+	usable_date_cols_dict = {c:c+"_cat" for c in df_coupons.columns if 'usable' in c}
+	df_coupons.rename(index=str, columns=usable_date_cols_dict, inplace=True)
+
 	# split back to the originals
 	df_coupons_train = df_coupons[df_coupons.set_type == 2].drop('set_type', axis=1)
 	df_coupons_valid = df_coupons[df_coupons.set_type == 1].drop('set_type', axis=1)
@@ -141,7 +145,7 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="build the features for the coupons")
 
-	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_processed",)
+	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_processed")
 	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_processed")
 	args = parser.parse_args()
 

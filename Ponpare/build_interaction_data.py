@@ -185,8 +185,16 @@ def build_user_and_item_feat_mtx(inp_dir, out_dir):
 	df_user_train_feat.sort_values('idx', inplace=True)
 	df_user_train_feat.drop(['user_id_hash', 'idx'], axis=1, inplace=True)
 
+	user_feat_mtx_colnames = df_user_train_feat.columns.tolist()
+	item_feat_mtx_colnames = df_coupons_train_feat.columns.tolist()
+
 	user_feat_mtx = csr_matrix(df_user_train_feat.values)
 	item_feat_mtx = csr_matrix(df_coupons_train_feat.values)
+
+	pickle.dump(user_feat_mtx_colnames,
+		open(os.path.join(out_dir,'train', "user_feat_mtx_colnames.p"), "wb"))
+	pickle.dump(item_feat_mtx_colnames,
+		open(os.path.join(out_dir,'train', "item_feat_mtx_colnames.p"), "wb"))
 
 	save_npz(os.path.join(out_dir, 'train', "user_feat_mtx.npz"), user_feat_mtx)
 	save_npz(os.path.join(out_dir, 'train', "item_feat_mtx.npz"), item_feat_mtx)
