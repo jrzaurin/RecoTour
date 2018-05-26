@@ -105,7 +105,8 @@ def build_interaction_df(inp_dir, out_dir, recency=False, mode=0):
 	df_interest_vtr.drop('views_count', axis=1, inplace=True)
 
 	# in case we want to add a factor depending on recency of purchase
-	df_interest = pd.concat([df_interest_ptr, df_interest_vtr], axis=0)
+	df_interest = pd.concat([df_interest_ptr, df_interest_vtr],
+		axis=0, ignore_index=True)
 	df_interest['days_to_present_inv'] = df_interest.days_to_present.max() - df_interest.days_to_present
 
 	rxmid, rtau, rtop = 150, 30, 1

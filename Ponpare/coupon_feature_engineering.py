@@ -20,7 +20,10 @@ def coupon_features(inp_dir, out_dir):
 	df_coupons_valid['set_type'] = 1
 	df_coupons_test  = pd.read_pickle(os.path.join(inp_dir, 'test', 'df_coupons_test.p'))
 	df_coupons_test['set_type'] = 0
-	df_coupons = pd.concat([df_coupons_train,df_coupons_valid,df_coupons_test], axis=0)
+	df_coupons = pd.concat(
+		[df_coupons_train,df_coupons_valid,df_coupons_test],
+		axis=0,
+		ignore_index=True)
 
 	# columns with NaN
 	has_nan = df_coupons.isnull().any(axis=0)
@@ -99,9 +102,12 @@ def coupon_features(inp_dir, out_dir):
 				df_coupons.loc[nan_idx, new_colname_2] = valid_mode
 		df_coupons[new_colname_2] = df_coupons[new_colname_2].astype('int')
 
-	# let's do dispfrom/dispend
+	# let's do dispfrom/dispend and dispperiod
 	df_coupons['dispfrom_cat'] = df_coupons.dispfrom.dt.dayofweek
 	df_coupons['dispend_cat'] = df_coupons.dispend.dt.dayofweek
+	# and also add dispperiod as categorical
+	df_coupons['dispperiod_cat'], dispperiod_bins = pd.qcut(df_coupons.dispperiod, q=4, labels=[0,1,2,3], retbins=True)
+	dict_of_mappings['dispperiod'] = dispperiod_bins
 
 	# price related features
 	df_coupons['price_rate_cat'], price_rate_bins = pd.qcut(df_coupons['price_rate'], q=3, labels=[0,1,2], retbins=True)
@@ -121,6 +127,7 @@ def coupon_features(inp_dir, out_dir):
 		dict_of_mappings[col] = dict(zip(values,labels))
 		df_coupons[col+'_cat'] = df_coupons[col].replace(dict_of_mappings[col])
 
+
 	drop_cols = le_cols + ['dispfrom', 'dispend', 'validfrom', 'validend', 'days_to_present']
 	df_coupons.drop(drop_cols, axis=1, inplace=True)
 
@@ -129,9 +136,15 @@ def coupon_features(inp_dir, out_dir):
 	df_coupons.rename(index=str, columns=usable_date_cols_dict, inplace=True)
 
 	# split back to the originals
-	df_coupons_train = df_coupons[df_coupons.set_type == 2].drop('set_type', axis=1)
-	df_coupons_valid = df_coupons[df_coupons.set_type == 1].drop('set_type', axis=1)
-	df_coupons_test = df_coupons[df_coupons.set_type == 0].drop('set_type', axis=1)
+	df_coupons_train = (df_coupons[df_coupons.set_type == 2]
+		.drop('set_type', axis=1)
+		.reset_index(drop=True))
+	df_coupons_valid = (df_coupons[df_coupons.set_type == 1]
+		.drop('set_type', axis=1)
+		.reset_index(drop=True))
+	df_coupons_test = (df_coupons[df_coupons.set_type == 0]
+		.drop('set_type', axis=1)
+		.reset_index(drop=True))
 
 	# save files
 	df_coupons_train.to_pickle(os.path.join(out_dir,"train","df_coupons_train_feat.p"))

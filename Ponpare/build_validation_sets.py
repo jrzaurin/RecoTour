@@ -95,6 +95,10 @@ def build_validation_sets(inp_dir, out_dir, tp):
 		tmp_valid.drop('days_to_present_flag', axis=1, inplace=True)
 		tmp_test.drop('days_to_present_flag', axis=1, inplace=True)
 
+		tmp_train.reset_index(drop=True, inplace=True)
+		tmp_valid.reset_index(drop=True, inplace=True)
+		tmp_test.reset_index(drop=True, inplace=True)
+
 		tmp_train.to_pickle(open(os.path.join(out_dir,'train',df+'_train.p'), 'wb'))
 		tmp_valid.to_pickle(open(os.path.join(out_dir,'valid',df+'_valid.p'), 'wb'))
 		tmp_test.to_pickle(open(os.path.join(out_dir,'test',df+'_test.p'), 'wb'))
