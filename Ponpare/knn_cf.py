@@ -101,7 +101,7 @@ idx_item_dict = {v:k for k,v in items_idx_dict.items()}
 # 2-. Per coupon, get the most similar training coupon and the
 # corresponding N KNN based in the interactions_mtx.
 # 3-. Rank them based on distance
-# 4-. Map them to validation coupons and recommend
+# 4-. Map them back to validation coupons and recommend
 
 # Note that here we based our recommendations on items. Therefore, in
 # principle we can recommend to any user in validation
@@ -129,14 +129,17 @@ for user, coupons in tmp_valid_dict.items():
 	if np.intersect1d(valid_coupon_ids, coupons).size !=0:
 		keep_users.append(user)
 interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
-user_item_tuple = [(k,v) for k,v in interactions_valid_dict.items()]
 
-# Let's build the KNN model
+# Let's build the KNN model...two lines :)
 model = NearestNeighbors(metric = 'cosine', algorithm = 'brute')
 model.fit(interactions_mtx_knn)
 
-def build_recommendations(user,coupons):
-	df_distance = pd.DataFrame()
+# Map the training interactions into validation. We run this loop on its own
+# for convenience
+interactions_mapped = {}
+for user, coupons in interactions_valid_dict.items():
+	# per user...
+	mapped_coupons = []
 	for coupon in coupons:
 		# if the coupon is not among the training coupons...
 		if coupon not in coupons_train_ids:
@@ -146,25 +149,26 @@ def build_recommendations(user,coupons):
 				coupon = valid_to_train_most_similar[coupon]
 			except KeyError:
 				continue
-		# Now that the coupon is map to an id among the training coupons, we
-		# now which row in the interaction matrix corresponds to
-		idx = items_idx_dict[coupon]
-		dist, idxs = model.kneighbors(interactions_mtx_knn[idx], n_neighbors = 11)
-		# given the returned indexes, we grab the corresponding training coupon_id
-		train_knn_coupons = [idx_item_dict[k] for k in idxs[0][1:]]
-		# We then map it to one of the 358 validation ids
-		valid_knn_coupons = [train_to_valid_most_similar[k] for k in train_knn_coupons]
-		# For convenience, we build a dataframe with (coupon_id, distance)
-		df_distance = df_distance.append(
-			pd.DataFrame(list(zip(valid_knn_coupons,dist[0][1:])),
-			columns=['coupon_id_hash','distance']),
-			ignore_index=True)
-	# Finally, we sort the values based on distance, we drop duplicates
-	# keeping first, and add them to a dictionary of recommendations
-	df_distance.sort_values('distance', inplace=True)
-	df_distance.drop_duplicates('coupon_id_hash', keep='first', inplace=True)
-	recommended_coupons = df_distance.coupon_id_hash.tolist()
-	return (user, recommended_coupons)
+		mapped_coupons.append(coupon)
+	interactions_mapped[user] = mapped_coupons
+
+# let's put it in a tuple, and build a function to run it in Parallel
+user_item_tuple = [(k,v) for k,v in interactions_mapped.items()]
+
+def build_recommendations(user,coupons):
+	# when ranking the most similar ones will be themselves -> ignore them
+	ignore = len(coupons)
+	# indexes in the matrix of interactions
+	idxs = [items_idx_dict[c] for c in coupons]
+	dist, nnidx = model.kneighbors(interactions_mtx_knn[idxs], n_neighbors = 11)
+	dist, nnidx = dist.ravel(), nnidx.ravel()
+	# rank indexes based on distance
+	ranked_dist = np.argsort(dist)[ignore:]
+	ranked_cp_idxs = nnidx[ranked_dist]
+	ranked_train_cp = [idx_item_dict[i] for i in ranked_cp_idxs]
+	# map training into validation coupons
+	ranked_valid_cp = [train_to_valid_most_similar[c] for c in ranked_train_cp]
+	return (user, ranked_valid_cp)
 
 cores = multiprocessing.cpu_count()
 recommend_coupons = Parallel(n_jobs=cores)(delayed(build_recommendations)(user,coupons) for user,coupons in user_item_tuple)
