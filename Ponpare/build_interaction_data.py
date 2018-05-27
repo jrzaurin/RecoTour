@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 from scipy.sparse import lil_matrix, csr_matrix, save_npz
 
-
 def sigmoid(x, xmid, tau, top):
 	"""
 	Sigmoid with upper limit
@@ -69,6 +68,8 @@ def build_interaction_df(inp_dir, out_dir, recency=False, mode=0):
 		df_visits_train.coupon_id_hash.isin(train_coupons)]
 	df_ptr = df_purchases_train[df_purchases_train.user_id_hash.isin(train_users) &
 		df_purchases_train.coupon_id_hash.isin(train_coupons)]
+	# we lose one customer (22624->22623) than viewed on coupon that is not in
+	# training coupons and bought another one but not in training period
 
 	# for purchases interest will be 1
 	df_interest_ptr = (df_ptr

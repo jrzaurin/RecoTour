@@ -170,8 +170,11 @@ def build_recommendations(user,coupons):
 	ranked_valid_cp = [train_to_valid_most_similar[c] for c in ranked_train_cp]
 	return (user, ranked_valid_cp)
 
+from time import time
+start = time()
 cores = multiprocessing.cpu_count()
 recommend_coupons = Parallel(n_jobs=cores)(delayed(build_recommendations)(user,coupons) for user,coupons in user_item_tuple)
+print(time()-start)
 
 recommendations_dict = {k:v for k,v in recommend_coupons}
 actual = []
