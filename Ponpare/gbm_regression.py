@@ -87,7 +87,7 @@ df_train = pd.merge(df_train, df_coupons_train_cat_feat, on = 'coupon_id_hash')
 # for the time being we ignore recency
 df_train.drop(['user_id_hash','coupon_id_hash','recency_factor'], axis=1, inplace=True)
 train = df_train.drop('interest', axis=1)
-y_train = df_train.interest.values
+y_train = df_train.interest
 all_cols = train.columns.tolist()
 cat_cols = [c for c in train.columns if '_cat' in c]
 
@@ -112,7 +112,7 @@ lgb_objective.i = 0
 best = fmin(fn=lgb_objective,
             space=lgb_parameter_space,
             algo=tpe.suggest,
-            max_evals=10)
+            max_evals=5)
 best['num_boost_round'] = int(best['num_boost_round'])
 best['num_leaves'] = int(best['num_leaves'])
 best['verbose'] = -1
@@ -196,3 +196,20 @@ for k,_ in recomendations_dict.items():
 	actual.append(list(interactions_valid_dict[k]))
 	pred.append(list(recomendations_dict[k]))
 
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+mod = lgb.LGBMRegressor(**best)
+mod.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
+
+# create our dataframe of feature importances
+feat_imp_df = eli5.explain_weights_df(mod, feature_names=all_cols)
+feat_imp_df
+
+from eli5.sklearn import PermutationImportance
+perm_train = PermutationImportance(mod, scoring='neg_mean_squared_error',
+                                   n_iter=5, random_state=1981)
+perm_train.fit(train, y_train)
+eli5.explain_weights_df(perm_train, feature_names=all_cols)
