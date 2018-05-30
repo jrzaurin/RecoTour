@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import random
 import os
 import xgboost as xgb
 import lightgbm as lgb
@@ -7,6 +8,7 @@ import catboost as ctb
 import warnings
 import multiprocessing
 
+from joblib import Parallel, delayed
 from recutils.average_precision import mapk
 from functools import reduce
 from hyperopt import hp, tpe
@@ -108,14 +110,17 @@ lgb_parameter_space = {
     'reg_lambda': hp.uniform('reg_lambda', 0.01, 1.),
 }
 
+from time import time
+s=time()
 lgb_objective.i = 0
 best = fmin(fn=lgb_objective,
             space=lgb_parameter_space,
             algo=tpe.suggest,
-            max_evals=5)
+            max_evals=10)
 best['num_boost_round'] = int(best['num_boost_round'])
 best['num_leaves'] = int(best['num_leaves'])
 best['verbose'] = -1
+print(time()-s)
 
 inp_params = best.copy()
 cv_result = lgb.cv(
@@ -128,6 +133,13 @@ cv_result = lgb.cv(
 	stratified=False,
 	)
 best['num_boost_round'] = len(cv_result['rmse-mean'])
+
+# save model
+model = lgb.LGBMRegressor(**best)
+model.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
+model.booster_.save_model('model.txt')
+# to load
+# model = lgb.Booster(model_file='mode.txt')
 
 # validation activities
 df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
@@ -176,8 +188,7 @@ X_valid = (df_valid
 	.drop(['user_id_hash','coupon_id_hash'], axis=1)
 	.values)
 
-mod = lgb.train(best, lgtrain, feature_name=all_cols, categorical_feature=cat_cols)
-preds = mod.predict(X_valid)
+preds = model.predict(X_valid)
 
 df_preds = df_valid[['user_id_hash','coupon_id_hash']]
 df_preds['interest'] = preds
@@ -196,21 +207,35 @@ for k,_ in recomendations_dict.items():
 	actual.append(list(interactions_valid_dict[k]))
 	pred.append(list(recomendations_dict[k]))
 
-
+print(mapk(actual,pred))
 
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-mod = lgb.LGBMRegressor(**best)
-mod.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
+from eli5.sklearn import PermutationImportance
+from eli5 import explain_weights_df,explain_prediction_df
 
 # create our dataframe of feature importances
-feat_imp_df = eli5.explain_weights_df(mod, feature_names=all_cols)
-feat_imp_df
+feat_imp_df = explain_weights_df(model, feature_names=all_cols)
+feat_imp_df.head(10)
 
-from eli5.sklearn import PermutationImportance
-perm_train = PermutationImportance(mod, scoring='neg_mean_squared_error',
-                                   n_iter=5, random_state=1981)
-perm_train.fit(train, y_train)
-eli5.explain_weights_df(perm_train, feature_names=all_cols)
+X_train = train.values
+exp_pred_df = explain_prediction_df(estimator=model, doc=X_train[0], feature_names=all_cols)
 
+import lime
+from lime.lime_tabular import LimeTabularExplainer
+explainer = LimeTabularExplainer(X_train, mode='regression',
+                                 feature_names=all_cols,
+                                 categorical_features=cat_cols,
+                                 random_state=1981,
+                                 discretize_continuous=True)
+exp = explainer.explain_instance(X_valid[10],
+                                 model.predict, num_features=20)
+
+import shap
+X_valid_rn = X_valid[random.sample(range(X_valid.shape[0]),10000)]
+shap_explainer = shap.TreeExplainer(model)
+valid_shap_vals = shap_explainer.shap_values(X_valid_rn)
+shap.force_plot(valid_shap_vals[0, :], feature_names=all_cols)
+shap.force_plot(valid_shap_vals, feature_names=all_cols)
+shap.summary_plot(valid_shap_vals, feature_names=all_cols, auto_size_plot=False)
+shap.dependence_plot('discount_price_mean', valid_shap_vals, feature_names=all_cols,dot_size=100)
