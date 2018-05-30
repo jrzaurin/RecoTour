@@ -37,6 +37,11 @@ target = 'interest'
 col_order=[target]+num_cols+cat_cols
 df_train.columns = col_order
 
+df_train_rn = df_train.sample(n=10000)
+
+df_test = df_train.sample(n=1000)
+
+
 currentcode = len(num_cols)
 catdict = {}
 catcodes = {}
@@ -45,19 +50,47 @@ for x in num_cols:
 for x in cat_cols:
     catdict[x] = 1
 
-noofrows = df_train.shape[0]
-noofcolumns = len(df_train.columns)
-with open("alltrainffm.txt", "w") as text_file:
-    for n, r in enumerate(range(3)):
-        if((n%100000)==0):
+noofrows = df_train_rn.shape[0]
+noofcolumns = len(df_train_rn.columns)
+with open("trainffm.txt", "w") as text_file:
+    for n, r in enumerate(range(noofrows)):
+        if((n%100)==0):
             print('Row',n)
         datastring = ""
-        datarow = df_train.iloc[r].to_dict()
+        datarow = df_train_rn.iloc[r].to_dict()
         datastring += str(datarow[target])
 
         for i, x in enumerate(catdict.keys()):
             if(catdict[x]==0):
-            	print(currentcode)
+                datastring = datastring + " "+str(i)+":"+ str(i)+":"+ str(datarow[x])
+            else:
+                if(x not in catcodes):
+                    catcodes[x] = {}
+                    currentcode +=1
+                    catcodes[x][datarow[x]] = currentcode
+                elif(datarow[x] not in catcodes[x]):
+                    currentcode +=1
+                    catcodes[x][datarow[x]] = currentcode
+
+                code = catcodes[x][datarow[x]]
+                datastring = datastring + " "+str(i)+":"+ str(int(code))+":1"
+        datastring += '\n'
+        a.append(datastring)
+        text_file.write(datastring)
+
+
+noofrows = df_test.shape[0]
+noofcolumns = len(df_test.columns)
+with open("testffm.txt", "w") as text_file:
+    for n, r in enumerate(range(noofrows)):
+        if((n%100)==0):
+            print('Row',n)
+        datastring = ""
+        datarow = df_test.iloc[r].to_dict()
+        datastring += str(datarow[target])
+
+        for i, x in enumerate(catdict.keys()):
+            if(catdict[x]==0):
                 datastring = datastring + " "+str(i)+":"+ str(i)+":"+ str(datarow[x])
             else:
                 if(x not in catcodes):
@@ -73,43 +106,19 @@ with open("alltrainffm.txt", "w") as text_file:
         datastring += '\n'
         text_file.write(datastring)
 
+import xlearn as xl
 
+ffm_model = xl.create_ffm()
+ffm_model.setTrain("trainffm.txt")
+ffm_model.setValidate("testffm.txt")
+ffm_model.setTXTModel("model.txt")
 
-def convert_to_ffm(df,type,numerics,categories,features):
-    currentcode = len(numerics)
-    catdict = {}
-    catcodes = {}
-    # Flagging categorical and numerical fields
-    for x in numerics:
-         catdict[x] = 0
-    for x in categories:
-         catdict[x] = 1
+param = {'task':'reg', # ‘binary’ for classification, ‘reg’ for Regression
+         'k':10,           # Size of latent factor
+         'lr':0.1,        # Learning rate for GD
+         'lambda':0.0002, # L2 Regularization Parameter
+         'epoch':10       # Maximum number of Epochs
+        }
 
-    nrows = df.shape[0]
-    ncolumns = len(features)
-    with open(str(type) + "_ffm.txt", "w") as text_file:
+ffm_model.fit(param, "model.out")
 
-    # Looping over rows to convert each row to libffm format
-    for n, r in enumerate(range(nrows)):
-         datastring = ""
-         datarow = df.iloc[r].to_dict()
-         datastring += str(int(datarow['Label']))
-         # For numerical fields, we are creating a dummy field here
-         for i, x in enumerate(catdict.keys()):
-             if(catdict[x]==0):
-                 datastring = datastring + " "+str(i)+":"+ str(i)+":"+ str(datarow[x])
-             else:
-         # For a new field appearing in a training example
-                 if(x not in catcodes):
-                     catcodes[x] = {}
-                     currentcode +=1
-                     catcodes[x][datarow[x]] = currentcode #encoding the feature
-         # For already encoded fields
-                 elif(datarow[x] not in catcodes[x]):
-                     currentcode +=1
-                     catcodes[x][datarow[x]] = currentcode #encoding the feature
-                 code = catcodes[x][datarow[x]]
-                 datastring = datastring + " "+str(i)+":"+ str(int(code))+":1"
-
-         datastring += '\n'
-         text_file.write(datastring)
