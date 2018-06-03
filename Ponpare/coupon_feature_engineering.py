@@ -44,9 +44,9 @@ def coupon_features(inp_dir, out_dir):
 
 	# Method 1: NaN as another category. Maybe we want to consider coupons
 	# with a validperiod of 0 as a class. For now, we will simply use quatiles
-	df_coupons['validperiod_cat_method1'], validperiod_bins_method1 = pd.qcut(df_coupons['validperiod'], q=4, labels=[0,1,2,3], retbins=True)
-	df_coupons.validperiod_cat_method1.cat.add_categories([4], inplace=True)
-	df_coupons['validperiod_cat_method1'].fillna(4, inplace=True)
+	df_coupons['validperiod_method1_cat'], validperiod_bins_method1 = pd.qcut(df_coupons['validperiod'], q=4, labels=[0,1,2,3], retbins=True)
+	df_coupons.validperiod_method1_cat.cat.add_categories([4], inplace=True)
+	df_coupons['validperiod_method1_cat'].fillna(4, inplace=True)
 
 	# Method 2: replace NaN first and then into categorical
 	validperiod_mode = df_coupons.validperiod.mode().values[0]
@@ -64,7 +64,7 @@ def coupon_features(inp_dir, out_dir):
 			df_coupons.loc[nan_idx, 'validperiod'] = median
 		elif non_nan_values.size==0:
 			df_coupons.loc[nan_idx, 'validperiod'] = validperiod_mode
-	df_coupons['validperiod_cat_method2'] = pd.cut(df_coupons['validperiod'],
+	df_coupons['validperiod_method2_cat'] = pd.cut(df_coupons['validperiod'],
 		bins=validperiod_bins_method1, labels=[0,1,2,3], include_lowest=True)
 	df_coupons['validperiod'] = df_coupons['validperiod'].astype('int')
 
@@ -79,12 +79,12 @@ def coupon_features(inp_dir, out_dir):
 		valid_mode = df_coupons[col].dt.dayofweek.mode().values[0]
 
 		# Method 1: NaN as another category
-		new_colname_1 = col+"_cat_method1"
+		new_colname_1 = col+"_method1_cat"
 		df_coupons[new_colname_1] = df_coupons[col].dt.dayofweek
 		df_coupons[new_colname_1] = df_coupons[new_colname_1].fillna(7).astype('int')
 
 		# Method 2: replace per category
-		new_colname_2 = col+"_cat_method2"
+		new_colname_2 = col+"_method2_cat"
 		df_coupons[new_colname_2] = df_coupons[col].dt.dayofweek
 		caps_vals = list(df_coupons[df_coupons[new_colname_2].isna()]['capsule_text'].value_counts().index)
 		for ct in caps_vals:
