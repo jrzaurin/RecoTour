@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import pickle
 import multiprocessing
+import lightgbm as lgb
 
 from joblib import Parallel, delayed
 from sklearn.metrics.pairwise import pairwise_distances
@@ -10,16 +11,7 @@ from sklearn.decomposition import NMF
 from scipy.sparse import csr_matrix, load_npz
 from sklearn.neighbors import NearestNeighbors
 from recutils.average_precision import mapk
-
-
-# Here we will use KNN to build a item-based collaborative filtering
-# recommendation algorithm. However, as straightforward this might sound,
-# there is an issue to address in this and any purely interaction-based
-# approach. We will build a matrix of interactions based on past interactions,
-# but the new coupons have never been seen before. Therefore, in real life, as
-# they come to the dataset and need to be displayed we could re-process and
-# re-train, or we could use a distance metric and associate new items to the
-# one existing. We will illustrate the later here.
+from sklearn.model_selection import train_test_split
 
 inp_dir = "../datasets/Ponpare/data_processed/"
 train_dir = "train"
@@ -29,20 +21,6 @@ df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coup
 df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, valid_dir, 'df_coupons_valid_feat.p'))
 coupons_train_ids = df_coupons_train_feat.coupon_id_hash.values
 coupons_valid_ids = df_coupons_valid_feat.coupon_id_hash.values
-
-
-# let's build a dictionary of most similar coupon from both train->valid and
-# valid->train. Here again we have a set of possibilities. One would be
-# directly compare features, which of course brings the caveat that
-# numerically comparing categorical features makes no sense, but since we just
-# want THE CLOSESTS pairs of coupons, I think one could got away with this one
-# here. Another one would be one-hot encode categorical features and then
-# compute cosine distance for the whole set of features, categorical and
-# numerical. And a final one, and the one we will explore here, will be
-# compute the jaccard_similarity for the one-hot encoded features and
-# euclidean "similarity" for the numerical one and combine them. (A further
-# one would just be use only the categorical, since most of the "content" of
-# the numerical features is (or should be) captured by the categorical
 
 # Categorical: let's add a flag for convenience
 df_coupons_train_feat['flag_cat'] = 0
@@ -110,7 +88,7 @@ interactions_mtx = load_npz(os.path.join(inp_dir, train_dir, "interactions_mtx.n
 items_idx_dict = pickle.load(open(os.path.join(inp_dir, train_dir, "items_idx_dict.p"),'rb'))
 users_idx_dict = pickle.load(open(os.path.join(inp_dir, train_dir, "users_idx_dict.p"),'rb'))
 
-nmf_model = NMF(n_components=10, init='random', random_state=1981)
+nmf_model = NMF(n_components=50, init='random', random_state=1981)
 user_factors = nmf_model.fit_transform(interactions_mtx)
 item_factors = nmf_model.components_.T
 
@@ -122,3 +100,91 @@ for hash_id,idx in users_idx_dict.items():
 item_factors_dict = {}
 for hash_id,idx in items_idx_dict.items():
 	item_factors_dict[hash_id] = item_factors[items_idx_dict[hash_id]]
+
+df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
+df_user_factors = (pd.DataFrame.from_dict(user_factors_dict, orient="index")
+	.reset_index())
+df_user_factors.columns = ['user_id_hash'] + ['user_factor_'+str(i) for i in range(50)]
+df_item_factors = (pd.DataFrame.from_dict(item_factors_dict, orient="index")
+	.reset_index())
+df_item_factors.columns = ['coupon_id_hash'] + ['item_factor_'+str(i) for i in range(50)]
+df_train = pd.merge(df_interest[['user_id_hash','coupon_id_hash','interest']],
+	df_item_factors, on='coupon_id_hash')
+df_train = pd.merge(df_train, df_user_factors, on='user_id_hash')
+X = df_train.iloc[:,3:].values
+y = df_train.interest.values
+
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.25)
+model = lgb.LGBMRegressor(n_estimators=2000)
+model.fit(X_train,y_train,
+	eval_set = [(X_valid,y_valid)],
+	early_stopping_rounds=20,
+	eval_metric="rmse")
+
+# VALIDATION
+df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
+df_visits_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_visits_valid.p'))
+df_visits_valid.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
+
+# subset users that were seeing in training
+train_users = df_interest.user_id_hash.unique()
+df_vva = df_visits_valid[df_visits_valid.user_id_hash.isin(train_users)]
+df_pva = df_purchases_valid[df_purchases_valid.user_id_hash.isin(train_users)]
+
+# interactions in validation: here we will not treat differently purchases or
+# viewed. If we recommend and it was viewed or purchased, we will considered
+# it as a hit
+id_cols = ['user_id_hash', 'coupon_id_hash']
+df_interactions_valid = pd.concat([df_pva[id_cols], df_vva[id_cols]], ignore_index=True)
+df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
+    .agg({'coupon_id_hash': 'unique'})
+    .reset_index())
+tmp_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
+    index=df_interactions_valid.user_id_hash).to_dict()
+
+valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
+keep_users = []
+for user, coupons in tmp_valid_dict.items():
+    if np.intersect1d(valid_coupon_ids, coupons).size !=0:
+        keep_users.append(user)
+# out of 6923, we end up with 6070, so not bad
+interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
+
+# Take the 358 validation coupons and the 6070 users seen in training and during
+# validation and rank!
+left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
+left['key'] = 0
+right = df_coupons_valid_feat[['coupon_id_hash']]
+right['key'] = 0
+df_valid = (pd.merge(left, right, on='key', how='outer')
+    .drop('key', axis=1))
+
+df_valid['mapped_coupons'] = (df_valid.coupon_id_hash
+	.apply(lambda x: valid_to_train_most_similar[x]))
+df_valid = pd.merge(df_valid, df_item_factors,
+	left_on='mapped_coupons', right_on='coupon_id_hash')
+df_valid = pd.merge(df_valid, df_user_factors,
+	on='user_id_hash')
+
+X_valid = df_valid.iloc[:, 4:].values
+preds = model.predict(X_valid)
+
+df_valid['interest'] = preds
+df_preds = df_valid[['user_id_hash', 'coupon_id_hash_x', 'interest']]
+df_preds.columns = ['user_id_hash', 'coupon_id_hash', 'interest']
+
+df_ranked = df_preds.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
+df_ranked = (df_ranked
+	.groupby('user_id_hash')['coupon_id_hash']
+	.apply(list)
+	.reset_index())
+recomendations_dict = pd.Series(df_ranked.coupon_id_hash.values,
+	index=df_ranked.user_id_hash).to_dict()
+
+actual = []
+pred = []
+for k,_ in recomendations_dict.items():
+	actual.append(list(interactions_valid_dict[k]))
+	pred.append(list(recomendations_dict[k]))
+
+print(mapk(actual,pred))
