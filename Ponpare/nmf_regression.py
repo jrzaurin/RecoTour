@@ -115,7 +115,7 @@ X = df_train.iloc[:,3:].values
 y = df_train.interest.values
 
 X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.25)
-model = lgb.LGBMRegressor(n_estimators=2000)
+model = lgb.LGBMRegressor(n_estimators=1000)
 model.fit(X_train,y_train,
 	eval_set = [(X_valid,y_valid)],
 	early_stopping_rounds=20,
