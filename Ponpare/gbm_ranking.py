@@ -43,6 +43,10 @@ df_obs_per_user = (df_train.groupby('user_id_hash')[['user_id_hash']]
 df_obs_per_user.columns = ['user_id_hash','n_obs']
 
 # For lambda_rank target needs to be categorical
+
+# use recency for better distributed values and split in more labels to see if
+# ranking is better
+
 interest_bins = np.percentile(df_train.interest, q=[50, 75, 90])
 df_train['interest_rank'] = df_train.interest.apply(
 	lambda x: 0
@@ -64,7 +68,7 @@ df_obs_per_user.sort_values('user_id_hash', inplace=True)
 df_train.sort_values('user_id_hash', inplace=True)
 
 def build_dataset(df_obs, df_feat, indexes):
-	df_set_obs = df_obs.iloc[train_index, :]
+	df_set_obs = df_obs.iloc[indexes, :]
 	df_set_feat = df_feat[df_feat.user_id_hash.isin(df_set_obs.user_id_hash)]
 	q_set = df_set_obs.n_obs.values
 	y_set = df_set_feat.interest_rank.values
