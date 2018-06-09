@@ -31,6 +31,8 @@ df_coupons_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
 
 # user features
 df_users_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_user_train_feat.p'))
+df_users_feat.drop('pref_name_cat', axis=1, inplace=True)
+
 
 # let's add a categorical feature for age that will be used later for the crossed_colums
 df_users_feat['age_cat'], age_bins = pd.qcut(df_users_feat['age'], q=4, labels=[0,1,2,3], retbins=True)
@@ -123,11 +125,22 @@ for col in embeddings_cols:
 		col_root_name = col[start:end]
 		if col_root_name == "small_area": col_root_name = "small_area_name"
 		encoding_dict[col] = dict_of_mappings[col_root_name]
-encoding_dict['pref_name_cat'] = dict_of_mappings['ken_name']
+# encoding_dict['pref_name_cat'] = dict_of_mappings['ken_name']
+
+# # manual fix for 'pref_name_cat'. NEEDS to happen at "user_feature_engineering.py"
+# encoding_dict['pref_name_cat']['NAN'] = 47
+
+# We need to build the training and validation datasets. Here we go:
+df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
+df_interest.drop('recency_factor', axis=1, inplace=True)
+df_train = pd.merge(df_interest, df_coupons_feat, on = 'coupon_id_hash')
+df_train = pd.merge(df_train, df_users_feat, on='user_id_hash')
 
 # Now it comes an important part, we are going to pass as embeddings users and items
-dict_of_users = {k:v for v,k in enumerate(df_users_feat.user_id_hash.unique())}
-dict_of_items = {k:v for v,k in enumerate(df_coupons_feat.coupon_id_hash.unique())}
+train_users = df_train.user_id_hash.unique()
+train_coupons = df_train.coupon_id_hash.unique()
+dict_of_users = {k:v for v,k in enumerate(train_users)}
+dict_of_items = {k:v for v,k in enumerate(train_coupons)}
 encoding_dict['user_id_hash'] = dict_of_users
 encoding_dict['coupon_id_hash'] = dict_of_items
 
@@ -166,6 +179,8 @@ df_valid['user_id_hash'] = df_valid.user_id_hash.apply(lambda x: dict_of_users[x
 df_valid['coupon_id_hash'] = df_valid.coupon_id_hash.apply(lambda x: dict_of_items[x])
 
 # now we need to split the datasets and save the indexes of the embedding columns
+# split the training dataset into training and validation and use the
+# validation as test dataset
 df_train_tr, df_train_val = train_test_split(df_train, test_size=0.3, random_state=1981)
 y_train, y_valid = df_train_tr.interest.values, df_train_val.interest.values
 
@@ -174,7 +189,7 @@ df_train_deep, df_valid_deep, df_test_deep = df_train_tr[deep_cols], df_train_va
 deep_column_idx = {k:v for v,k in enumerate(df_train_deep.columns)}
 
 # one hot encoding for the wide columns must be done all at once to ensure
-# same number of dimensions
+# same number of dimensions through all datasets
 df_train_tr['set_type']  = 0
 df_train_val['set_type']  = 1
 df_valid['set_type']  = 2
@@ -199,15 +214,21 @@ X_valid_wide, X_valid_deep = df_valid_wide.values, df_valid_deep.values
 X_test_wide, X_test_deep   = df_test_wide.values, df_test_deep.values
 
 # And finally lets create a convenient dictionary with all that we need
-wd_dataset = dict()
-train_dataset = namedtuple('train_dataset', 'wide, deep, labels')
-valid_dataset  = namedtuple('valid_dataset' , 'wide, deep, labels')
-test_dataset  = namedtuple('test_dataset' , 'wide, deep')
-wd_dataset['train_dataset'] = train_dataset(X_train_wide, X_train_deep, y_train)
-wd_dataset['valid_dataset']  = valid_dataset(X_valid_wide, X_valid_deep, y_valid)
-wd_dataset['test_dataset']  = test_dataset(X_test_wide, X_test_deep)
+wd_dataset = {}
+wd_dataset['train_dataset'] = {}
+wd_dataset['train_dataset']['wide'], \
+wd_dataset['train_dataset']['deep'], \
+wd_dataset['train_dataset']['target'] = X_train_wide, X_train_deep, y_train
+wd_dataset['valid_dataset'] = {}
+wd_dataset['valid_dataset']['wide'], \
+wd_dataset['valid_dataset']['deep'], \
+wd_dataset['valid_dataset']['target'] = X_valid_wide, X_valid_deep, y_valid
+wd_dataset['test_dataset'] = {}
+wd_dataset['test_dataset']['wide'], \
+wd_dataset['test_dataset']['deep'] = X_test_wide, X_test_deep
 wd_dataset['embeddings_input']  = embeddings_input
 wd_dataset['deep_column_idx'] = deep_column_idx
 wd_dataset['encoding_dict'] = encoding_dict
+wd_dataset['continuous_cols'] = continuous_cols
 
-# pickle.dump(wd_dataset, open("wd_dataset.p", "wb"))
+pickle.dump(wd_dataset, open("wd_dataset.p", "wb"))
