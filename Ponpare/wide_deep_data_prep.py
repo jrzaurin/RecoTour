@@ -123,7 +123,7 @@ for col in embeddings_cols:
 		col_root_name = col[start:end]
 		if col_root_name == "small_area": col_root_name = "small_area_name"
 		encoding_dict[col] = dict_of_mappings[col_root_name]
-encoding_dict['pref_name_cat'] = dict_of_mappings['ken_name']
+# encoding_dict['pref_name_cat'] = dict_of_mappings['ken_name']
 
 # Now it comes an important part, we are going to pass as embeddings users and items
 dict_of_users = {k:v for v,k in enumerate(df_users_feat.user_id_hash.unique())}
@@ -202,12 +202,17 @@ X_test_wide, X_test_deep   = df_test_wide.values, df_test_deep.values
 
 # And finally lets create a convenient dictionary with all that we need
 wd_dataset = dict()
-train_dataset = namedtuple('train_dataset', 'wide, deep, labels')
-valid_dataset  = namedtuple('valid_dataset' , 'wide, deep, labels')
-test_dataset  = namedtuple('test_dataset' , 'wide, deep')
-wd_dataset['train_dataset'] = train_dataset(X_train_wide, X_train_deep, y_train)
-wd_dataset['valid_dataset']  = valid_dataset(X_valid_wide, X_valid_deep, y_valid)
-wd_dataset['test_dataset']  = test_dataset(X_test_wide, X_test_deep)
+wd_dataset['train_dataset'] = {}
+wd_dataset['train_dataset']['wide'], \
+wd_dataset['train_dataset']['deep'], \
+wd_dataset['train_dataset']['target'] = X_train_wide, X_train_deep, y_train
+wd_dataset['valid_dataset'] = {}
+wd_dataset['valid_dataset']['wide'], \
+wd_dataset['valid_dataset']['deep'], \
+wd_dataset['valid_dataset']['target'] = X_valid_wide, X_valid_deep, y_valid
+wd_dataset['test_dataset'] = {}
+wd_dataset['test_dataset']['wide'], \
+wd_dataset['test_dataset']['deep'] = X_test_wide, X_test_deep
 wd_dataset['embeddings_input']  = embeddings_input
 wd_dataset['deep_column_idx'] = deep_column_idx
 wd_dataset['encoding_dict'] = encoding_dict

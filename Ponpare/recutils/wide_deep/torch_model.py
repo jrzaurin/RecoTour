@@ -13,8 +13,6 @@ from torch.utils.data import Dataset, DataLoader
 use_cuda = torch.cuda.is_available()
 
 
-
-
 class WideDeepLoader(Dataset):
     """Helper to facilitate loading the data to the pytorch models.
     Parameters:
@@ -23,9 +21,9 @@ class WideDeepLoader(Dataset):
     """
     def __init__(self, data):
 
-        self.X_wide = data.wide
-        self.X_deep = data.deep
-        self.Y = data.labels
+        self.X_wide = data['wide']
+        self.X_deep = data['deep']
+        self.Y = data['target']
 
     def __getitem__(self, idx):
 
@@ -105,49 +103,55 @@ class WideDeep(nn.Module):
         return out
 
 
+emb = [getattr(model, 'emb_layer_'+col)(X_d[:,model.deep_column_idx[col]].long())
+       for col,_,_ in model.embeddings_input[:14]]
+
+
 # Network set up
-wide_dim = wd_dataset['train_dataset'].wide.shape[1]
+wide_dim = wd_dataset['train_dataset']['wide'].shape[1]
 deep_column_idx = wd_dataset['deep_column_idx']
-continuous_cols = wd_dataset['continuous_cols']
+continuous_cols = []
 
 embeddings_input= wd_dataset['embeddings_input']
-embeddings_input2 = embeddings_input[:18]
-add_continuous = embeddings_input[18:]
-continuous_cols2 = continuous_cols + [c[0] for c in add_continuous]
 encoding_dict   = wd_dataset['encoding_dict']
 hidden_layers = [100,50]
 dropout = [0.5,0.2]
 
-model = WideDeep(wide_dim,embeddings_input2,continuous_cols2,deep_column_idx,hidden_layers,dropout,encoding_dict)
+model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
 
 train_dataset = wd_dataset['train_dataset']
+train_dataset['deep'] = train_dataset['deep'][:, :20]
+
 widedeep_dataset = WideDeepLoader(train_dataset)
 train_loader = DataLoader(dataset=widedeep_dataset,
     batch_size=64,
-    shuffle=True)
+    shuffle=False)
 
 model.cuda()
 criterion = F.mse_loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 for i, (X_wide, X_deep, target) in enumerate(train_loader):
-    if i < 10:
+    if i < 3:
+        print(i)
         X_w = Variable(X_wide)
         X_d = Variable(X_deep)
         y = Variable(target).float()
+
     else:
         break
 
     if use_cuda:
         X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
 
-optimizer.zero_grad()
-y_pred =  model(X_w, X_d)
-loss = criterion(y_pred.squeeze(1), y)
-loss.backward()
-optimizer.step()
+    optimizer.zero_grad()
+    y_pred =  model(X_w, X_d)
+    loss = criterion(y_pred.squeeze(1), y)
+    loss.backward()
+    optimizer.step()
 
-# print('Epoch {} of {}, Loss: {}'.format(epoch+1, n_epochs,
-#     round(loss.data[0],3)))
+
+    # print('Epoch {} of {}, Loss: {}'.format(epoch+1, n_epochs,
+    #     round(loss.data[0],3)))
 
 
 
