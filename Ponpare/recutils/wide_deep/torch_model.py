@@ -108,15 +108,15 @@ deep_column_idx = wd_dataset['deep_column_idx']
 continuous_cols = wd_dataset['continuous_cols']
 embeddings_input= wd_dataset['embeddings_input']
 encoding_dict   = wd_dataset['encoding_dict']
-hidden_layers = [100,50]
-dropout = [0.5,0.2]
+hidden_layers = [50,25]
+dropout = [0.5,0.5]
 
 model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
 
 train_dataset = wd_dataset['train_dataset']
 widedeep_dataset = WideDeepLoader(train_dataset)
 train_loader = DataLoader(dataset=widedeep_dataset,
-    batch_size=256,
+    batch_size=5096,
     shuffle=True,
     num_workers=4)
 
