@@ -8,10 +8,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
-
+from tqdm import tqdm,trange
 
 use_cuda = torch.cuda.is_available()
-
+wd_dataset = pickle.load(open("wd_dataset.p", "rb"))
 
 class WideDeepLoader(Dataset):
     """Helper to facilitate loading the data to the pytorch models.
@@ -102,16 +102,10 @@ class WideDeep(nn.Module):
 
         return out
 
-
-emb = [getattr(model, 'emb_layer_'+col)(X_d[:,model.deep_column_idx[col]].long())
-       for col,_,_ in model.embeddings_input[:14]]
-
-
 # Network set up
 wide_dim = wd_dataset['train_dataset']['wide'].shape[1]
 deep_column_idx = wd_dataset['deep_column_idx']
-continuous_cols = []
-
+continuous_cols = wd_dataset['continuous_cols']
 embeddings_input= wd_dataset['embeddings_input']
 encoding_dict   = wd_dataset['encoding_dict']
 hidden_layers = [100,50]
@@ -120,25 +114,71 @@ dropout = [0.5,0.2]
 model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
 
 train_dataset = wd_dataset['train_dataset']
-train_dataset['deep'] = train_dataset['deep'][:, :20]
-
 widedeep_dataset = WideDeepLoader(train_dataset)
 train_loader = DataLoader(dataset=widedeep_dataset,
-    batch_size=64,
-    shuffle=False)
+    batch_size=256,
+    shuffle=True,
+    num_workers=4)
+
+def train(model, criterion, optimizer, train_loader, epochs):
+
+    # switch to train mode
+    model.train()
+
+    steps_per_epoch = (train_loader.dataset.X_wide.shape[0] // train_loader.batch_size) + 1
+
+    # we will use tqdm for pretty progressbars
+for epoch in range(5):
+    with trange(steps_per_epoch) as t:
+        for i, (X_wide, X_deep, target) in zip(t, train_loader):
+        # for i in t:
+            t.set_description('epoch %i' % epoch)
+
+            X_w = Variable(X_wide)
+            X_d = Variable(X_deep)
+            y = Variable(target).float()
+            if use_cuda:
+                X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
+
+            optimizer.zero_grad()
+
+            y_pred =  model(X_w, X_d)
+
+            loss = criterion(y_pred.squeeze(1), y)
+            t.set_postfix(loss=loss.item())
+
+            loss.backward()
+            optimizer.step()
+
+for epoch in range(5):
+    print(epoch)
+    for i, (X_wide, X_deep, target) in enumerate(train_loader):
+        if i%1000==0:print(i)
+        X_w = Variable(X_wide)
+        X_d = Variable(X_deep)
+        y = Variable(target).float()
+        if use_cuda:
+            X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
+
+        optimizer.zero_grad()
+
+        y_pred =  model(X_w, X_d)
+
+        loss = criterion(y_pred.squeeze(1), y)
+
+        loss.backward()
+        optimizer.step()
+    print(loss.item())
+
 
 model.cuda()
 criterion = F.mse_loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 for i, (X_wide, X_deep, target) in enumerate(train_loader):
-    if i < 3:
-        print(i)
-        X_w = Variable(X_wide)
-        X_d = Variable(X_deep)
-        y = Variable(target).float()
-
-    else:
-        break
+    if i%1000==0:print(i)
+    X_w = Variable(X_wide)
+    X_d = Variable(X_deep)
+    y = Variable(target).float()
 
     if use_cuda:
         X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()

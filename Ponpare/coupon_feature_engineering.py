@@ -70,7 +70,7 @@ def coupon_features(inp_dir, out_dir):
 
 	# let's save the mappings
 	dict_of_mappings = {}
-	dict_of_mappings['validperiod'] = validperiod_bins_method1
+	dict_of_mappings['validperiod_cat'] = validperiod_bins_method1
 
 	# Let's now take care of validfrom and validend
 	valid_cols = ['validfrom', 'validend']
@@ -107,25 +107,25 @@ def coupon_features(inp_dir, out_dir):
 	df_coupons['dispend_cat'] = df_coupons.dispend.dt.dayofweek
 	# and also add dispperiod as categorical
 	df_coupons['dispperiod_cat'], dispperiod_bins = pd.qcut(df_coupons.dispperiod, q=4, labels=[0,1,2,3], retbins=True)
-	dict_of_mappings['dispperiod'] = dispperiod_bins
+	dict_of_mappings['dispperiod_cat'] = dispperiod_bins
 
 	# price related features
 	df_coupons['price_rate_cat'], price_rate_bins = pd.qcut(df_coupons['price_rate'], q=3, labels=[0,1,2], retbins=True)
 	df_coupons['catalog_price_cat'], catalog_price_bins = pd.qcut(df_coupons['catalog_price'], q=3, labels=[0,1,2], retbins=True)
 	df_coupons['discount_price_cat'], discount_price_bins = pd.qcut(df_coupons['discount_price'], q=3, labels=[0,1,2], retbins=True)
-	dict_of_mappings['price_rate'] = price_rate_bins
-	dict_of_mappings['catalog_price'] = catalog_price_bins
-	dict_of_mappings['discount_price'] = discount_price_bins
+	dict_of_mappings['price_rate_cat'] = price_rate_bins
+	dict_of_mappings['catalog_price_cat'] = catalog_price_bins
+	dict_of_mappings['discount_price_cat'] = discount_price_bins
 
 	# Finally let's LabelEncode some additional features. I will do it
 	# manually since I want to keep the mappings
 	le_cols = ['capsule_text', 'genre_name', 'large_area_name', 'ken_name', 'small_area_name']
 	for col in le_cols:
-		dict_of_mappings[col] = {}
+		dict_of_mappings[col+"_cat"] = {}
 		values = list(df_coupons[col].unique())
 		labels = list(np.arange(len(values)))
-		dict_of_mappings[col] = dict(zip(values,labels))
-		df_coupons[col+'_cat'] = df_coupons[col].replace(dict_of_mappings[col])
+		dict_of_mappings[col+"_cat"] = dict(zip(values,labels))
+		df_coupons[col+'_cat'] = df_coupons[col].replace(dict_of_mappings[col+"_cat"])
 
 
 	drop_cols = le_cols + ['dispfrom', 'dispend', 'validfrom', 'validend', 'days_to_present']

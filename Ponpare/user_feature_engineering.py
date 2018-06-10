@@ -3,6 +3,7 @@ import numpy as np
 import argparse
 import pickle
 import os
+import re
 
 from functools import reduce
 from scipy import stats
@@ -95,13 +96,18 @@ def user_features(inp_dir, out_dir):
 	# 1-. Let's start building user features based on "demographics" (_d)
 	df_user_feat_d = df_utr.copy()
 
-	df_user_feat_d['pref_name_cat'] = df_user_feat_d.pref_name.replace(dict_of_mappings['ken_name'])
+	df_user_feat_d['pref_name_cat'] = df_user_feat_d.pref_name.replace(dict_of_mappings['ken_name_cat'])
 	new_pref_name_cat = df_user_feat_d.pref_name_cat.max() + 1
 	df_user_feat_d['pref_name_cat'] = df_user_feat_d.pref_name_cat.fillna(new_pref_name_cat).astype('int')
 	df_user_feat_d.drop('pref_name', axis=1, inplace=True)
 
-	dict_of_mappings['sex_id'] = {'f':0, 'm':1}
-	df_user_feat_d['sex_id_cat'] = df_user_feat_d.sex_id.replace(dict_of_mappings['sex_id'])
+	# given that we have added a category to pref_name, let's update the dict_of_mappings
+	pref_name_dict = dict_of_mappings['ken_name_cat'].copy()
+	pref_name_dict['NAN'] = int(new_pref_name_cat)
+	dict_of_mappings['pref_name_cat'] = pref_name_dict
+
+	dict_of_mappings['sex_id_cat'] = {'f':0, 'm':1}
+	df_user_feat_d['sex_id_cat'] = df_user_feat_d.sex_id.replace(dict_of_mappings['sex_id_cat'])
 	df_user_feat_d.drop('sex_id', axis=1, inplace=True)
 
 	# 2-. Let's now build user features based on purchase behaviour (_p):
@@ -132,11 +138,11 @@ def user_features(inp_dir, out_dir):
 		.reset_index()
 		)
 	small_area_df_p['top_small_areas'] = small_area_df_p.small_area_name.apply(lambda x: top_values(x))
-	small_area_df_p['top1_small_area'] =  small_area_df_p.top_small_areas.apply(lambda x: x[0])
-	small_area_df_p['top2_small_area'] =  small_area_df_p.top_small_areas.apply(lambda x: x[1])
+	small_area_df_p['top1_small_area_name'] =  small_area_df_p.top_small_areas.apply(lambda x: x[0])
+	small_area_df_p['top2_small_area_name'] =  small_area_df_p.top_small_areas.apply(lambda x: x[1])
 	small_area_df_p.drop(['small_area_name', 'top_small_areas'], axis=1, inplace=True)
-	for col in ['top1_small_area', 'top2_small_area']:
-		small_area_df_p[col] = small_area_df_p[col].replace(dict_of_mappings['small_area_name'])
+	for col in ['top1_small_area_name', 'top2_small_area_name']:
+		small_area_df_p[col] = small_area_df_p[col].replace(dict_of_mappings['small_area_name_cat'])
 
 	day_of_week_df_p = (df_ptr.groupby("user_id_hash")['day_of_week']
 		.apply(list)
@@ -152,7 +158,7 @@ def user_features(inp_dir, out_dir):
 	df_user_feat_p = reduce(lambda left,right: pd.merge(left,right,on=['user_id_hash']), df_l_p)
 
 	# add "_cat" to categorical features
-	cat_feat_p = ['top1_small_area', 'top2_small_area', 'top1_dayofweek', 'top2_dayofweek']
+	cat_feat_p = ['top1_small_area_name', 'top2_small_area_name', 'top1_dayofweek', 'top2_dayofweek']
 	cat_feat_name_p = [c+"_cat" for c in cat_feat_p]
 	cat_feat_name_dict_p = dict(zip(cat_feat_p, cat_feat_name_p))
 	df_user_feat_p.rename(index=str, columns=cat_feat_name_dict_p, inplace=True)
@@ -281,12 +287,35 @@ def user_features(inp_dir, out_dir):
 	# (~df_utr.user_id_hash.isin(df_ptr.user_id_hash))].shape
 
 	# For them all columns in df_user_feat_p will be -1
-	for c in df_user_feat.columns[1:]:
-		if 'cat' in c:
-			cat_label = df_user_feat[c].max() + 1
-			df_user_feat[c] = df_user_feat[c].fillna(cat_label).astype('int')
+	prefixes = ['top1_', 'top2_', 'top3_']
+	for col in df_user_feat.columns[2:]:
+		if col.endswith("_cat") and df_user_feat[col].isna().any():
+			# We are going to treat NaN as a new category for these cols, so
+			# we need to update the dictionary of mappings. They are mostly
+			# related to capsule_text_cat and genre_name_cat with the prefix
+			# top_n:
+			for prefix in prefixes:
+				if prefix in col:
+					start = re.search(prefix, col).end()
+			root_name = col[start:]
+
+			# if the column is derived from root_name, the correponding
+			# dictionary would be the same as that of root_name plus an extra
+			# category for 'NAN'
+			if root_name in dict_of_mappings.keys():
+				col_dict = dict_of_mappings[root_name].copy()
+				new_col_cat = len(col_dict)-1
+			else:
+				col_categories = np.sort(df_user_feat[col].unique())[:-1]
+				col_dict = {int(k):int(v) for v,k in enumerate(col_categories)}
+				new_col_cat =int(df_user_feat[col].max()+1)
+
+			col_dict['NAN'] = new_col_cat
+			dict_of_mappings[col] = col_dict
+			df_user_feat[col] = df_user_feat[col].fillna(new_col_cat).astype('int')
+
 		else:
-			df_user_feat[c].fillna(-1, inplace=True)
+			df_user_feat[col].fillna(-1, inplace=True)
 	# There are 18 users that are in active_users but not in df_user_feat:
 	# np.setdiff1d(active_users, df_users_train.user_id_hash.unique()).size
 
