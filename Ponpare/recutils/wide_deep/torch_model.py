@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm,trange
 
 use_cuda = torch.cuda.is_available()
@@ -102,7 +103,90 @@ class WideDeep(nn.Module):
 
         return out
 
+
+    def fit(self, train_loader, criterion, optimizer, n_epochs, eval_loader=None, lr_scheduler=None):
+
+        train_steps =  (len(train_loader.dataset) // train_loader.batch_size) + 1
+        if eval_loader:
+            eval_steps =  (len(eval_loader.dataset) // eval_loader.batch_size) + 1
+
+        for epoch in range(n_epochs):
+            if lr_scheduler: lr_scheduler.step()
+            net = self.train()
+            with trange(train_steps) as t:
+                for i, (X_wide, X_deep, target) in zip(t, train_loader):
+                    t.set_description('epoch %i' % (epoch+1))
+
+                    X_w = Variable(X_wide)
+                    X_d = Variable(X_deep)
+                    y = Variable(target).float()
+                    if use_cuda:
+                        X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
+
+                    optimizer.zero_grad()
+
+                    y_pred =  net(X_w, X_d)
+
+                    loss = criterion(y_pred.squeeze(1), y)
+                    t.set_postfix(loss=loss.item())
+
+                    loss.backward()
+                    optimizer.step()
+
+            if eval_loader:
+                eval_loss=0
+                net = self.eval()
+                with trange(eval_steps) as v:
+                    for i, (X_wide, X_deep, target) in zip(v, eval_loader):
+                        v.set_description('valid')
+
+                        X_w = Variable(X_wide)
+                        X_d = Variable(X_deep)
+                        y = Variable(target).float()
+                        if use_cuda:
+                            X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
+
+                        y_pred = net(X_w,X_d)
+
+                        loss = criterion(y_pred.squeeze(1), y)
+                        v.set_postfix(loss=loss.item())
+                        eval_loss+=loss.item()
+
+                eval_loss /= eval_steps
+                print("Evaluation loss: {:.4f}".format(eval_loss))
+
+
+    def predict(self, dataset):
+
+        X_w = Variable(torch.from_numpy(dataset['wide'])).float()
+        X_d = Variable(torch.from_numpy(dataset['deep']))
+
+        if use_cuda:
+            X_w, X_d = X_w.cuda(), X_d.cuda()
+
+        net = self.eval()
+        preds = net(X_w,X_d).cpu().data.numpy()
+
+        return preds
+
+    def get_embeddings(self, col_name):
+
+        params = list(self.named_parameters())
+        emb_layers = [p for p in params if 'emb_layer' in p[0]]
+        emb_layer  = [layer for layer in emb_layers if col_name in layer[0]][0]
+        embeddings = emb_layer[1].cpu().data.numpy()
+        col_label_encoding = self.encoding_dict[col_name]
+        inv_dict = {v:k for k,v in col_label_encoding.items()}
+        embeddings_dict = {}
+        for idx,value in inv_dict.items():
+            embeddings_dict[value] = embeddings[idx]
+
+        return embeddings_dict
+
+
+
 # Network set up
+n_epochs = 3
 wide_dim = wd_dataset['train_dataset']['wide'].shape[1]
 deep_column_idx = wd_dataset['deep_column_idx']
 continuous_cols = wd_dataset['continuous_cols']
@@ -111,219 +195,26 @@ encoding_dict   = wd_dataset['encoding_dict']
 hidden_layers = [50,25]
 dropout = [0.5,0.5]
 
-model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
 
 train_dataset = wd_dataset['train_dataset']
-widedeep_dataset = WideDeepLoader(train_dataset)
-train_loader = DataLoader(dataset=widedeep_dataset,
+widedeep_dataset_tr = WideDeepLoader(train_dataset)
+train_loader = DataLoader(dataset=widedeep_dataset_tr,
     batch_size=5096,
     shuffle=True,
     num_workers=4)
 
-def train(model, criterion, optimizer, train_loader, epochs):
+valid_dataset = wd_dataset['valid_dataset']
+widedeep_dataset_val = WideDeepLoader(valid_dataset)
+eval_loader = DataLoader(dataset=widedeep_dataset_val,
+    batch_size=5096,
+    shuffle=True,
+    num_workers=4)
 
-    # switch to train mode
-    model.train()
+dataset = wd_dataset['test_dataset']
 
-    steps_per_epoch = (train_loader.dataset.X_wide.shape[0] // train_loader.batch_size) + 1
-
-    # we will use tqdm for pretty progressbars
-for epoch in range(5):
-    with trange(steps_per_epoch) as t:
-        for i, (X_wide, X_deep, target) in zip(t, train_loader):
-        # for i in t:
-            t.set_description('epoch %i' % epoch)
-
-            X_w = Variable(X_wide)
-            X_d = Variable(X_deep)
-            y = Variable(target).float()
-            if use_cuda:
-                X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
-
-            optimizer.zero_grad()
-
-            y_pred =  model(X_w, X_d)
-
-            loss = criterion(y_pred.squeeze(1), y)
-            t.set_postfix(loss=loss.item())
-
-            loss.backward()
-            optimizer.step()
-
-for epoch in range(5):
-    print(epoch)
-    for i, (X_wide, X_deep, target) in enumerate(train_loader):
-        if i%1000==0:print(i)
-        X_w = Variable(X_wide)
-        X_d = Variable(X_deep)
-        y = Variable(target).float()
-        if use_cuda:
-            X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
-
-        optimizer.zero_grad()
-
-        y_pred =  model(X_w, X_d)
-
-        loss = criterion(y_pred.squeeze(1), y)
-
-        loss.backward()
-        optimizer.step()
-    print(loss.item())
-
-
+model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
 model.cuda()
 criterion = F.mse_loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-for i, (X_wide, X_deep, target) in enumerate(train_loader):
-    if i%1000==0:print(i)
-    X_w = Variable(X_wide)
-    X_d = Variable(X_deep)
-    y = Variable(target).float()
+lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
 
-    if use_cuda:
-        X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
-
-    optimizer.zero_grad()
-    y_pred =  model(X_w, X_d)
-    loss = criterion(y_pred.squeeze(1), y)
-    loss.backward()
-    optimizer.step()
-
-
-    # print('Epoch {} of {}, Loss: {}'.format(epoch+1, n_epochs,
-    #     round(loss.data[0],3)))
-
-
-
-
-
-    # def fit(self, dataset, n_epochs, batch_size):
-    #     """Run the model for the training set at dataset.
-    #     Parameters:
-    #     ----------
-    #     dataset (dict): dictionary with the training sets -
-    #     X_wide_train, X_deep_train, target
-    #     n_epochs (int)
-    #     batch_size (int)
-    #     """
-    #     widedeep_dataset = WideDeepLoader(dataset)
-    #     train_loader = torch.utils.data.DataLoader(dataset=widedeep_dataset,
-    #                                                batch_size=batch_size,
-    #                                                shuffle=True)
-
-    #     # set the model in training mode
-    #     net = self.train()
-    #     for epoch in range(n_epochs):
-    #         total=0
-    #         correct=0
-    #         for i, (X_wide, X_deep, target) in enumerate(train_loader):
-    #             X_w = Variable(X_wide)
-    #             X_d = Variable(X_deep)
-    #             y = (Variable(target).float() if self.method != 'multiclass' else Variable(target))
-
-    #             if use_cuda:
-    #                 X_w, X_d, y = X_w.cuda(), X_d.cuda(), y.cuda()
-
-    #             self.optimizer.zero_grad()
-    #             y_pred =  net(X_w, X_d)
-    #             loss = self.criterion(y_pred, y)
-    #             loss.backward()
-    #             self.optimizer.step()
-
-    #             if self.method != "regression":
-    #                 total+= y.size(0)
-    #                 if self.method == 'logistic':
-    #                     y_pred_cat = (y_pred > 0.5).squeeze(1).float()
-    #                 if self.method == "multiclass":
-    #                     _, y_pred_cat = torch.max(y_pred, 1)
-    #                 correct+= float((y_pred_cat == y).sum().data[0])
-
-    #         if self.method != "regression":
-    #             print ('Epoch {} of {}, Loss: {}, accuracy: {}'.format(epoch+1,
-    #                 n_epochs, round(loss.data[0],3), round(correct/total,4)))
-    #         else:
-    #             print ('Epoch {} of {}, Loss: {}'.format(epoch+1, n_epochs,
-    #                 round(loss.data[0],3)))
-
-
-    # def predict(self, dataset):
-    #     """Predict target for dataset.
-    #     Parameters:
-    #     ----------
-    #     dataset (dict): dictionary with the testing dataset -
-    #     X_wide_test, X_deep_test, target
-    #     Returns:
-    #     --------
-    #     array-like with the target for dataset
-    #     """
-
-    #     X_w = Variable(torch.from_numpy(dataset.wide)).float()
-    #     X_d = Variable(torch.from_numpy(dataset.deep))
-
-    #     if use_cuda:
-    #         X_w, X_d = X_w.cuda(), X_d.cuda()
-
-    #     # set the model in evaluation mode so dropout is not applied
-    #     net = self.eval()
-    #     pred = net(X_w,X_d).cpu()
-    #     if self.method == "regression":
-    #         return pred.squeeze(1).data.numpy()
-    #     if self.method == "logistic":
-    #         return (pred > 0.5).squeeze(1).data.numpy()
-    #     if self.method == "multiclass":
-    #         _, pred_cat = torch.max(pred, 1)
-    #         return pred_cat.data.numpy()
-
-
-    # def predict_proba(self, dataset):
-    #     """Predict predict probability for dataset.
-    #     This method will only work with method logistic/multiclass
-    #     Parameters:
-    #     ----------
-    #     dataset (dict): dictionary with the testing dataset -
-    #     X_wide_test, X_deep_test, target
-    #     Returns:
-    #     --------
-    #     array-like with the probability for dataset.
-    #     """
-
-    #     X_w = Variable(torch.from_numpy(dataset.wide)).float()
-    #     X_d = Variable(torch.from_numpy(dataset.deep))
-
-    #     if use_cuda:
-    #         X_w, X_d = X_w.cuda(), X_d.cuda()
-
-    #     # set the model in evaluation mode so dropout is not applied
-    #     net = self.eval()
-    #     pred = net(X_w,X_d).cpu()
-    #     if self.method == "logistic":
-    #         pred = pred.squeeze(1).data.numpy()
-    #         probs = np.zeros([pred.shape[0],2])
-    #         probs[:,0] = 1-pred
-    #         probs[:,1] = pred
-    #         return probs
-    #     if self.method == "multiclass":
-    #         return pred.data.numpy()
-
-
-    # def get_embeddings(self, col_name):
-    #     """Extract the embeddings for the embedding columns.
-    #     Parameters:
-    #     -----------
-    #     col_name (str) : column we want the embedding for
-    #     Returns:
-    #     --------
-    #     embeddings_dict (dict): dictionary with the column values and the embeddings
-    #     """
-
-    #     params = list(self.named_parameters())
-    #     emb_layers = [p for p in params if 'emb_layer' in p[0]]
-    #     emb_layer  = [layer for layer in emb_layers if col_name in layer[0]][0]
-    #     embeddings = emb_layer[1].cpu().data.numpy()
-    #     col_label_encoding = self.encoding_dict[col_name]
-    #     inv_dict = {v:k for k,v in col_label_encoding.iteritems()}
-    #     embeddings_dict = {}
-    #     for idx,value in inv_dict.iteritems():
-    #         embeddings_dict[value] = embeddings[idx]
-
-    #     return embeddings_dict
