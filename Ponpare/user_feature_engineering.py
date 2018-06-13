@@ -304,7 +304,7 @@ def user_features(inp_dir, out_dir):
 			# category for 'NAN'
 			if root_name in dict_of_mappings.keys():
 				col_dict = dict_of_mappings[root_name].copy()
-				new_col_cat = len(col_dict)-1
+				new_col_cat = len(col_dict)
 			else:
 				col_categories = np.sort(df_user_feat[col].unique())[:-1]
 				col_dict = {int(k):int(v) for v,k in enumerate(col_categories)}

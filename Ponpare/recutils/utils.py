@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 import os
 
+from collections import Counter
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import MinMaxScaler
 
@@ -50,33 +51,27 @@ def coupon_similarity_function(train_coupons_path, valid_coupons_path, method="c
 	coupons_valid_feat = np.hstack([coupons_valid_feat_num_norm, coupons_valid_feat_oh])
 
 	if method is "cosine":
-		cos_dist = pairwise_distances(coupons_train_feat, coupons_valid_feat, metric='cosine')
-		train_to_valid_top_n_idx = np.apply_along_axis(np.argsort, 1, cos_dist)
-		valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, cos_dist.T)
-		train_to_valid_most_similar = dict(zip(coupons_train_ids,
-			coupons_valid_ids[train_to_valid_top_n_idx[:,0]]))
+		dist_mtx = pairwise_distances(coupons_valid_feat, coupons_train_feat, metric='cosine')
+		valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, dist_mtx)
 		valid_to_train_most_similar = dict(zip(coupons_valid_ids,
 			coupons_train_ids[valid_to_train_top_n_idx[:,0]]))
 
 	elif method is "combined":
 
-		euc_dist = pairwise_distances(coupons_train_feat_num_norm, coupons_valid_feat_num_norm, metric='euclidean')
-		jacc_dist = pairwise_distances(coupons_train_feat_oh, coupons_valid_feat_oh, metric='jaccard')
+		euc_dist = pairwise_distances(coupons_valid_feat_num_norm, coupons_train_feat_num_norm, metric='euclidean')
+		jacc_dist = pairwise_distances(coupons_valid_feat_oh, coupons_train_feat_oh, metric='jaccard')
 
 		euc_dist_interp = np.empty((euc_dist.shape[0],euc_dist.shape[1]))
 		for i,(e,j) in enumerate(zip(euc_dist, jacc_dist)):
 			l1,r1,l2,r2 = np.min(e), np.max(e), np.min(j), np.max(j)
 			euc_dist_interp[i,:] = np.interp(e, [l1,r1], [l2,r2])
-		tot_dist = (jacc_dist + euc_dist_interp)/2.
+		dist_mtx = (jacc_dist + euc_dist_interp)/2.
 
-		train_to_valid_top_n_idx = np.apply_along_axis(np.argsort, 1, tot_dist)
-		valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, tot_dist.T)
-		train_to_valid_most_similar = dict(zip(coupons_train_ids,
-			coupons_valid_ids[train_to_valid_top_n_idx[:,0]]))
+		valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, dist_mtx)
 		valid_to_train_most_similar = dict(zip(coupons_valid_ids,
 			coupons_train_ids[valid_to_train_top_n_idx[:,0]]))
 
-	return train_to_valid_most_similar, valid_to_train_most_similar
+	return valid_to_train_most_similar
 
 
 def validation_interactions(purchases_path, visist_path, valid_coupons_path, train_users, drop_cols,  mapping_dict=None):
@@ -106,15 +101,17 @@ def validation_interactions(purchases_path, visist_path, valid_coupons_path, tra
 	interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
 
 	if mapping_dict:
+		df_coupons_valid_cat_feat['valid_coupon_id_hash'] = df_coupons_valid_cat_feat['coupon_id_hash']
 		df_coupons_valid_cat_feat['coupon_id_hash'] = \
 			df_coupons_valid_cat_feat.coupon_id_hash.apply(lambda x: mapping_dict[x])
+		right = df_coupons_valid_cat_feat[['coupon_id_hash','valid_coupon_id_hash']]
+	else:
+		right = df_coupons_valid_cat_feat[['coupon_id_hash']]
 
 	left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
 	left['key'] = 0
-	right = df_coupons_valid_cat_feat[['coupon_id_hash']]
 	right['key'] = 0
 	df_valid = (pd.merge(left, right, on='key', how='outer')
 		.drop('key', axis=1))
-	df_valid.drop_duplicates(inplace=True)
 
 	return interactions_valid_dict, df_valid

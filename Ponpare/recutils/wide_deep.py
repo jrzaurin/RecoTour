@@ -12,7 +12,6 @@ from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm,trange
 
 use_cuda = torch.cuda.is_available()
-wd_dataset = pickle.load(open("wd_dataset.p", "rb"))
 
 class WideDeepLoader(Dataset):
     """Helper to facilitate loading the data to the pytorch models.
@@ -20,22 +19,28 @@ class WideDeepLoader(Dataset):
     --------
     data: namedtuple with 3 elements - (wide_input_data, deep_inp_data, target)
     """
-    def __init__(self, data):
+    def __init__(self, data, mode='train'):
 
         self.X_wide = data['wide']
         self.X_deep = data['deep']
-        self.Y = data['target']
+        self.mode = mode
+        if self.mode is 'train':
+            self.Y = data['target']
+        elif self.mode is 'test':
+            self.Y = None
 
     def __getitem__(self, idx):
 
         xw = self.X_wide[idx]
         xd = self.X_deep[idx]
-        y  = self.Y[idx]
-
-        return xw, xd, y
+        if self.mode is 'train':
+            y  = self.Y[idx]
+            return xw, xd, y
+        elif self.mode is 'test':
+            return xw, xd
 
     def __len__(self):
-        return len(self.Y)
+        return len(self.X_deep)
 
 
 class WideDeep(nn.Module):
@@ -156,18 +161,27 @@ class WideDeep(nn.Module):
                 print("Evaluation loss: {:.4f}".format(eval_loss))
 
 
-    def predict(self, dataset):
+    def predict(self, dataloader):
 
-        X_w = Variable(torch.from_numpy(dataset['wide'])).float()
-        X_d = Variable(torch.from_numpy(dataset['deep']))
-
-        if use_cuda:
-            X_w, X_d = X_w.cuda(), X_d.cuda()
+        test_steps =  (len(dataloader.dataset) // dataloader.batch_size) + 1
 
         net = self.eval()
-        preds = net(X_w,X_d).cpu().data.numpy()
+        preds_l = []
+        with trange(test_steps) as t:
+            for i, (X_wide, X_deep) in zip(t, dataloader):
+                t.set_description('predict')
+
+                X_w = Variable(X_wide)
+                X_d = Variable(X_deep)
+                if use_cuda:
+                    X_w, X_d = X_w.cuda(), X_d.cuda()
+
+                preds_l.append(net(X_w,X_d))
+
+        preds = torch.cat(preds_l, 0).cpu().data.numpy()
 
         return preds
+
 
     def get_embeddings(self, col_name):
 
@@ -182,39 +196,3 @@ class WideDeep(nn.Module):
             embeddings_dict[value] = embeddings[idx]
 
         return embeddings_dict
-
-
-
-# Network set up
-n_epochs = 3
-wide_dim = wd_dataset['train_dataset']['wide'].shape[1]
-deep_column_idx = wd_dataset['deep_column_idx']
-continuous_cols = wd_dataset['continuous_cols']
-embeddings_input= wd_dataset['embeddings_input']
-encoding_dict   = wd_dataset['encoding_dict']
-hidden_layers = [50,25]
-dropout = [0.5,0.5]
-
-
-train_dataset = wd_dataset['train_dataset']
-widedeep_dataset_tr = WideDeepLoader(train_dataset)
-train_loader = DataLoader(dataset=widedeep_dataset_tr,
-    batch_size=5096,
-    shuffle=True,
-    num_workers=4)
-
-valid_dataset = wd_dataset['valid_dataset']
-widedeep_dataset_val = WideDeepLoader(valid_dataset)
-eval_loader = DataLoader(dataset=widedeep_dataset_val,
-    batch_size=5096,
-    shuffle=True,
-    num_workers=4)
-
-dataset = wd_dataset['test_dataset']
-
-model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidden_layers,dropout,encoding_dict)
-model.cuda()
-criterion = F.mse_loss
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
-
