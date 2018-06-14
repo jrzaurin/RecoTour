@@ -13,6 +13,7 @@ from tqdm import tqdm,trange
 
 use_cuda = torch.cuda.is_available()
 
+
 class WideDeepLoader(Dataset):
     """Helper to facilitate loading the data to the pytorch models.
     Parameters:

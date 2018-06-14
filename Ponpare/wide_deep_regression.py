@@ -19,13 +19,15 @@ wd_interactions = pickle.load(open(os.path.join(wd_dir,wd_interactions_fname), "
 # Network set up
 wide_dim = wd_dataset['train_dataset']['wide'].shape[1]
 deep_column_idx = wd_dataset['deep_column_idx']
-continuous_cols = wd_dataset['continuous_cols']
+continuous_cols = []
+# continuous_cols = wd_dataset['continuous_cols']
 embeddings_input= wd_dataset['embeddings_input']
 encoding_dict   = wd_dataset['encoding_dict']
 hidden_layers = [100,50]
 dropout = [0.5,0.5]
 
 train_dataset = wd_dataset['train_dataset']
+train_dataset['wide'] = np.array(train_dataset['wide'].todense())
 widedeep_dataset_tr = WideDeepLoader(train_dataset)
 train_loader = DataLoader(dataset=widedeep_dataset_tr,
     batch_size=5096,
@@ -33,6 +35,7 @@ train_loader = DataLoader(dataset=widedeep_dataset_tr,
     num_workers=4)
 
 valid_dataset = wd_dataset['valid_dataset']
+valid_dataset['wide'] = np.array(valid_dataset['wide'].todense())
 widedeep_dataset_val = WideDeepLoader(valid_dataset)
 eval_loader = DataLoader(dataset=widedeep_dataset_val,
     batch_size=5096,
@@ -40,6 +43,7 @@ eval_loader = DataLoader(dataset=widedeep_dataset_val,
     num_workers=4)
 
 test_dataset = wd_dataset['test_dataset']
+test_dataset['wide'] = np.array(test_dataset['wide'].todense())
 widedeep_dataset_te = WideDeepLoader(test_dataset, mode='test')
 test_loader = DataLoader(dataset=widedeep_dataset_te,
     batch_size=5096,
@@ -50,19 +54,21 @@ model = WideDeep(wide_dim,embeddings_input,continuous_cols,deep_column_idx,hidde
 model.cuda()
 criterion = F.mse_loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
-
-model.fit(train_loader, criterion, optimizer, n_epochs=5, eval_loader=eval_loader, lr_scheduler=lr_scheduler)
+# lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.5, last_epoch=-1)
+model.fit(train_loader, criterion, optimizer, n_epochs=5, eval_loader=eval_loader)
 preds = model.predict(test_loader)
 
 df_all_interactions = wd_interactions['all_valid_interactions']
+df_all_interactions.drop('coupon_id_hash', axis=1, inplace=True)
+df_all_interactions.columns = ['user_id_hash','coupon_id_hash']
 df_all_interactions['interest'] = preds
+
 df_ranked = df_all_interactions.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
 df_ranked = (df_ranked
-	.groupby('user_id_hash')['valid_coupon_id_hash']
+	.groupby('user_id_hash')['coupon_id_hash']
 	.apply(list)
 	.reset_index())
-recomendations_dict = pd.Series(df_ranked.valid_coupon_id_hash.values,
+recomendations_dict = pd.Series(df_ranked.coupon_id_hash.values,
 	index=df_ranked.user_id_hash).to_dict()
 true_valid_interactions = wd_interactions['true_valid_interactions']
 
