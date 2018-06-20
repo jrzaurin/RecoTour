@@ -11,8 +11,7 @@ import multiprocessing
 from joblib import Parallel, delayed
 from recutils.average_precision import mapk
 from functools import reduce
-from hyperopt import hp, tpe
-from hyperopt.fmin import fmin
+from hyperopt import hp, tpe, fmin, Trials
 
 warnings.filterwarnings("ignore")
 cores = multiprocessing.cpu_count()
@@ -22,8 +21,6 @@ def lgb_objective(params):
 	"""
 	objective function for lightgbm.
 	"""
-
-	lgb_objective.i+=1
 
 	# hyperopt casts as float
 	params['num_boost_round'] = int(params['num_boost_round'])
@@ -43,18 +40,71 @@ def lgb_objective(params):
 		stratified=False,
 		)
 
+	early_stop_dict[lgb_objective.i] = len(cv_result['rmse-mean'])
 	error = cv_result['rmse-mean'][-1]
 	print("INFO: iteration {} error {:.3f}".format(lgb_objective.i, error))
 
+	lgb_objective.i+=1
+
 	return error
 
+
+def lgb_objective_map(params):
+	"""
+	objective function for lightgbm.
+	"""
+
+	# hyperopt casts as float
+	params['num_boost_round'] = int(params['num_boost_round'])
+	params['num_leaves'] = int(params['num_leaves'])
+
+	# need to be passed as parameter
+	params['verbose'] = -1
+	params['seed'] = 1
+
+	cv_result = lgb.cv(
+	params,
+	lgtrain,
+	nfold=3,
+	metrics='rmse',
+	num_boost_round=params['num_boost_round'],
+	early_stopping_rounds=20,
+	stratified=False,
+	)
+	early_stop_dict[lgb_objective_map.i] = len(cv_result['rmse-mean'])
+	params['num_boost_round'] = len(cv_result['rmse-mean'])
+
+	model = lgb.LGBMRegressor(**params)
+	model.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
+	preds = model.predict(X_valid)
+
+	df_eval['interest'] = preds
+	df_ranked = df_eval.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
+	df_ranked = (df_ranked
+		.groupby('user_id_hash')['coupon_id_hash']
+		.apply(list)
+		.reset_index())
+	recomendations_dict = pd.Series(df_ranked.coupon_id_hash.values,
+		index=df_ranked.user_id_hash).to_dict()
+
+	actual = []
+	pred = []
+	for k,_ in recomendations_dict.items():
+		actual.append(list(interactions_valid_dict[k]))
+		pred.append(list(recomendations_dict[k]))
+
+	result = mapk(actual,pred)
+	print("INFO: iteration {} MAP {:.3f}".format(lgb_objective_map.i, result))
+
+	lgb_objective_map.i+=1
+
+	return 1-result
 
 # This approach will be perhaps the one easier to understand. We have user
 # features, item features and a target (interest), so let's turn this into a
 # supervised problem and fit a regressor. Since this is a "standard" technique
 # I will use this opportunity to illustrate a variety of tools around ML in
 # general and boosted methods in particular
-
 inp_dir = "../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
@@ -99,48 +149,7 @@ lgtrain = lgb.Dataset(train,
 	categorical_feature = cat_cols,
 	free_raw_data=False)
 
-lgb_parameter_space = {
-	'learning_rate': hp.uniform('learning_rate', 0.01, 0.5),
-	'num_boost_round': hp.quniform('num_boost_round', 50, 500, 50),
-	'num_leaves': hp.quniform('num_leaves', 30,1024,5),
-    'min_child_weight': hp.quniform('min_child_weight', 1, 50, 2),
-    'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1.),
-    'subsample': hp.uniform('subsample', 0.5, 1.),
-    'reg_alpha': hp.uniform('reg_alpha', 0.01, 1.),
-    'reg_lambda': hp.uniform('reg_lambda', 0.01, 1.),
-}
-
-from time import time
-s=time()
-lgb_objective.i = 0
-best = fmin(fn=lgb_objective,
-            space=lgb_parameter_space,
-            algo=tpe.suggest,
-            max_evals=10)
-best['num_boost_round'] = int(best['num_boost_round'])
-best['num_leaves'] = int(best['num_leaves'])
-best['verbose'] = -1
-print(time()-s)
-
-inp_params = best.copy()
-cv_result = lgb.cv(
-	inp_params,
-	lgtrain,
-	nfold=3,
-	metrics='rmse',
-	num_boost_round=inp_params['num_boost_round'],
-	early_stopping_rounds=20,
-	stratified=False,
-	)
-best['num_boost_round'] = len(cv_result['rmse-mean'])
-
-# save model
-model = lgb.LGBMRegressor(**best)
-model.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
-model.booster_.save_model('model.txt')
-# to load
-# model = lgb.Booster(model_file='mode.txt')
-
+# ---------------------------------------------------------------
 # validation activities
 df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
 df_visits_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_visits_valid.p'))
@@ -187,13 +196,45 @@ df_valid = pd.merge(df_valid, df_coupons_valid_cat_feat, on = 'coupon_id_hash')
 X_valid = (df_valid
 	.drop(['user_id_hash','coupon_id_hash'], axis=1)
 	.values)
+df_eval = df_valid[['user_id_hash','coupon_id_hash']]
+# -----------------------------------------------------------------------------
+
+# defining the parameter space
+lgb_parameter_space = {
+	'learning_rate': hp.uniform('learning_rate', 0.01, 0.5),
+	'num_boost_round': hp.quniform('num_boost_round', 50, 500, 50),
+	'num_leaves': hp.quniform('num_leaves', 30,1024,5),
+    'min_child_weight': hp.quniform('min_child_weight', 1, 50, 2),
+    'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1.),
+    'subsample': hp.uniform('subsample', 0.5, 1.),
+    'reg_alpha': hp.uniform('reg_alpha', 0.01, 1.),
+    'reg_lambda': hp.uniform('reg_lambda', 0.01, 1.),
+}
+
+# METHOD1: optimize agains rmse
+early_stop_dict = {}
+trials = Trials()
+lgb_objective.i = 0
+best = fmin(fn=lgb_objective,
+            space=lgb_parameter_space,
+            algo=tpe.suggest,
+            max_evals=10,
+            trials=trials)
+best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
+best['num_leaves'] = int(best['num_leaves'])
+best['verbose'] = -1
+
+# fit model
+model = lgb.LGBMRegressor(**best)
+model.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
+# save model
+# model.booster_.save_model('model.txt')
+# to load
+# model = lgb.Booster(model_file='mode.txt')
 
 preds = model.predict(X_valid)
-
-df_preds = df_valid[['user_id_hash','coupon_id_hash']]
-df_preds['interest'] = preds
-
-df_ranked = df_preds.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
+df_eval['interest'] = preds
+df_ranked = df_eval.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
 df_ranked = (df_ranked
 	.groupby('user_id_hash')['coupon_id_hash']
 	.apply(list)
@@ -208,6 +249,21 @@ for k,_ in recomendations_dict.items():
 	pred.append(list(recomendations_dict[k]))
 
 print(mapk(actual,pred))
+
+# METHOD2: optimize against MAP
+early_stop_dict = {}
+trials = Trials()
+lgb_objective_map.i = 0
+best = fmin(fn=lgb_objective_map,
+            space=lgb_parameter_space,
+            algo=tpe.suggest,
+            max_evals=5,
+            trials=trials)
+best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
+best['num_leaves'] = int(best['num_leaves'])
+best['verbose'] = -1
+print(1-trials.best_trial['result']['loss'])
+# -----------------------------------------------------------------------------
 
 import seaborn as sns
 import matplotlib.pyplot as plt
