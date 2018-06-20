@@ -159,7 +159,7 @@ class WideDeep(nn.Module):
                         eval_loss+=loss.item()
 
                 eval_loss /= eval_steps
-                print("Evaluation loss: {:.4f}".format(eval_loss))
+                print("Validation loss: {:.4f}".format(eval_loss))
 
 
     def predict(self, dataloader):
