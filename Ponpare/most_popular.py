@@ -15,6 +15,10 @@ df_purchases_train = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_purchases
 df_visits_train = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_visits_train.p'))
 df_visits_train.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
 
+# train users
+df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_train_feat.p'))
+train_users = df_user_train_feat.user_id_hash.unique()
+
 # Compute popularity:
 # popularity = n_purchaes + 0.1*n_visits
 df_n_purchases = (df_purchases_train
@@ -99,14 +103,27 @@ df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases
 df_visits_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_visits_valid.p'))
 df_visits_valid.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
 
+# subset users that were seeing in training
+df_vva = df_visits_valid[df_visits_valid.user_id_hash.isin(train_users)]
+df_pva = df_purchases_valid[df_purchases_valid.user_id_hash.isin(train_users)]
+
 id_cols = ['user_id_hash', 'coupon_id_hash']
-df_interactions_valid = pd.concat([df_purchases_valid[id_cols],
-	df_visits_valid[id_cols]], ignore_index=True)
+df_interactions_valid = pd.concat([df_pva[id_cols], df_vva[id_cols]], ignore_index=True)
 df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
 	.agg({'coupon_id_hash': 'unique'})
 	.reset_index())
-interactions_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
+tmp_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
 	index=df_interactions_valid.user_id_hash).to_dict()
+
+valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
+
+keep_users = []
+for user, coupons in tmp_valid_dict.items():
+	if np.intersect1d(valid_coupon_ids, coupons).size !=0:
+		keep_users.append(user)
+# out of 6924, we end up with 6071, so not bad
+interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
+
 
 # Take the 358 validation coupons and the 7057 users in total
 left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
