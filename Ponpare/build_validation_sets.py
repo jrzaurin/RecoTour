@@ -5,20 +5,19 @@ import os
 
 # this is the way we will design the experiment:
 
-# 1-. INTERACTIONS: we will define training and validation sets for
-# interactions -> visits and purchaes
+# 1-. INTERACTIONS: visits and purchaes
 
 # 2-. COUPONS: based on the testing set they provide in the competition,
 # testing coupons are selected based on dispfrom and are displayed for a week.
-# The fact that they provided with features for the testing coupons suggest
-# that we can use ALL coupons to engineer the features and the split into
-# training and testing coupons. Nonetheless, we will also explore the
-# possibility where new coupons have never seen before, we need to recommend
-# on the fly, and there is a possibility that there are new features in those
-# coupons. In this case, we would need to recommend based on some similarity
-# function between new and already-seen coupons
+# The fact that they provided features for the testing coupons suggest that we
+# can use ALL coupons to engineer the features and the split into training and
+# testing coupons. Nonetheless, we will also explore the possibility where new
+# coupons have never seen before, we need to recommend on the fly, and there
+# is a possibility that there are new features in those coupons. In this case,
+# we would need to recommend based on some similarity function between new and
+# already-seen coupons
 
-# 3-. USERS: We will concentrate in users that have been seen during training.
+# 3-. USERS: we will concentrate in users that have been seen during training.
 
 def build_validation_sets(inp_dir, out_dir, tp):
 
@@ -41,8 +40,7 @@ def build_validation_sets(inp_dir, out_dir, tp):
 	df_purchases = pd.read_csv(os.path.join(inp_dir,"coupon_detail_train.csv"))
 	df_purchases['i_date'] = pd.to_datetime(df_purchases.i_date, infer_datetime_format=True)
 
-	# Here we want to explore different recommendation algorithms. Therefore,
-	# for the purposes of this excercise we can ignore the 310 coupons that
+	# For the purposes of this excercise we can ignore the 310 coupons that
 	# are provided in the kaggle competition as part of the testing set, since
 	# we want to know how good are we recommending. We will divide the time
 	# period in train, validation and testing

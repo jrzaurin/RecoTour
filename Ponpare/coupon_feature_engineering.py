@@ -9,9 +9,9 @@ from scipy import stats
 
 def coupon_features(inp_dir, out_dir):
 
-	# for this approach, we will assume that we know the coupons that will go live
-	# beforehand and that we have the time to compute the features using the whole
-	# dataset of coupons
+	# We will assume that we know the coupons that will go live beforehand and
+	# that we have the time to compute the features using the whole dataset of
+	# coupons
 
 	# Coupon features
 	df_coupons_train = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_coupons_train.p'))

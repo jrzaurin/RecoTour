@@ -40,9 +40,9 @@ def time_diff(row, all_metrics=False):
 def user_features(inp_dir, out_dir):
 
 	# User features: here we will consider ONLY users that were seeing during
-	# training period. Of course there is a caveat here that is that users that
-	# registered long ago they had more time to interact, so recommending is
-	# easier. We'll see if we can mitigate this later
+	# training period. There is a caveat regarding to users that registered
+	# long ago they had more time to interact. For those a possibility would
+	# be recommending the most popular.
 
 	# Interactions
 	df_visits_train = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_visits_train.p'))
