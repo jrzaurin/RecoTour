@@ -2,13 +2,16 @@ import numpy as np
 import pandas as pd
 import os
 import pickle
-import multiprocessing
 
-from joblib import Parallel, delayed
+from time import time
 from sklearn.metrics.pairwise import pairwise_distances
 from scipy.sparse import csr_matrix, load_npz
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import MinMaxScaler
 from recutils.average_precision import mapk
+
+import multiprocessing
+from joblib import Parallel, delayed
 
 # Here we will use KNN to build a item-based collaborative filtering
 # recommendation algorithm. However, as straightforward this might sound,
@@ -69,18 +72,31 @@ coupons_valid_feat_oh = (df_dummy_feats[df_dummy_feats.flag_cat_1 != 0]
 coupons_train_feat_num = df_coupons_train_feat[num_cols].values
 coupons_valid_feat_num = df_coupons_valid_feat[num_cols].values
 
-euc_dist = pairwise_distances(coupons_train_feat_num, coupons_valid_feat_num, metric='euclidean')
-jacc_dist = pairwise_distances(coupons_train_feat_oh, coupons_valid_feat_oh, metric='jaccard')
+scaler = MinMaxScaler()
+coupons_train_feat_num_norm = scaler.fit_transform(coupons_train_feat_num)
+coupons_valid_feat_num_norm = scaler.transform(coupons_valid_feat_num)
 
-euc_dist_interp = np.empty((euc_dist.shape[0],euc_dist.shape[1]))
-for i,(e,j) in enumerate(zip(euc_dist, jacc_dist)):
-	l1,r1,l2,r2 = np.min(e), np.max(e), np.min(j), np.max(j)
-	euc_dist_interp[i,:] = np.interp(e, [l1,r1], [l2,r2])
-tot_dist = (jacc_dist + euc_dist_interp)/2.
+coupons_train_feat = np.hstack([coupons_train_feat_num_norm, coupons_train_feat_oh])
+coupons_valid_feat = np.hstack([coupons_valid_feat_num_norm, coupons_valid_feat_oh])
+
+dist_mtx = pairwise_distances(coupons_valid_feat, coupons_train_feat, metric='cosine')
+valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, dist_mtx)
+valid_to_train_most_similar = dict(zip(coupons_valid_ids,
+	coupons_train_ids[valid_to_train_top_n_idx[:,0]]))
+
+
+# euc_dist = pairwise_distances(coupons_train_feat_num, coupons_valid_feat_num, metric='euclidean')
+# jacc_dist = pairwise_distances(coupons_train_feat_oh, coupons_valid_feat_oh, metric='jaccard')
+
+# euc_dist_interp = np.empty((euc_dist.shape[0],euc_dist.shape[1]))
+# for i,(e,j) in enumerate(zip(euc_dist, jacc_dist)):
+# 	l1,r1,l2,r2 = np.min(e), np.max(e), np.min(j), np.max(j)
+# 	euc_dist_interp[i,:] = np.interp(e, [l1,r1], [l2,r2])
+# tot_dist = (jacc_dist + euc_dist_interp)/2.
 
 # now we have a matrix of distances, let's build the dictionaries
-train_to_valid_top_n_idx = np.apply_along_axis(np.argsort, 1, tot_dist)
-valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, tot_dist.T)
+valid_to_train_top_n_idx = np.apply_along_axis(np.argsort, 1, dist_mtx)
+train_to_valid_top_n_idx = np.apply_along_axis(np.argsort, 1, dist_mtx.T)
 train_to_valid_most_similar = dict(zip(coupons_train_ids,
 	coupons_valid_ids[train_to_valid_top_n_idx[:,0]]))
 # there is one coupon in validation: '0a8e967835e2c20ac4ed8e69ee3d7349' that
@@ -170,7 +186,7 @@ def build_recommendations(user,coupons):
 	ranked_valid_cp = [train_to_valid_most_similar[c] for c in ranked_train_cp]
 	return (user, ranked_valid_cp)
 
-from time import time
+
 start = time()
 cores = multiprocessing.cpu_count()
 recommend_coupons = Parallel(n_jobs=cores)(delayed(build_recommendations)(user,coupons) for user,coupons in user_item_tuple)
@@ -184,3 +200,4 @@ for k,_ in recommendations_dict.items():
 	pred.append(list(recommendations_dict[k]))
 
 result = mapk(actual, pred)
+print(result)
