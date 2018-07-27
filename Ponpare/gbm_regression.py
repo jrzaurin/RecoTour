@@ -100,11 +100,6 @@ def lgb_objective_map(params):
 
 	return 1-result
 
-# This approach will be perhaps the one easier to understand. We have user
-# features, item features and a target (interest), so let's turn this into a
-# supervised problem and fit a regressor. Since this is a "standard" technique
-# I will use this opportunity to illustrate a variety of tools around ML in
-# general and boosted methods in particular
 inp_dir = "../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
@@ -112,22 +107,11 @@ valid_dir = "valid"
 # train coupon features
 df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coupons_train_feat.p'))
 
-# In general, when using boosted methods, the presence of correlated or
-# redundant features is not a big deal, since these will be ignored through
-# the boosting rounds. However, for clarity and to reduce the chances of
-# overfitting, we will select a subset of features here. All the numerical
-# features have corresponding categorical ones, so we will keep those in
-# moving forward. In addition, if we remember, for valid period, validend and
-# validfrom, we used to methods to inpute NaN. Method1: Considering NaN as
-# another category and Method2: replace NaN first in the object/numeric column
-# and then turning the column into categorical. To start with, we will use
-# Method1 here.
 drop_cols = [c for c in df_coupons_train_feat.columns
     if ((not c.endswith('_cat')) or ('method2' in c)) and (c!='coupon_id_hash')]
 df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
 
-# train user features: there are a lot of features for users, both, numerical
-# and categorical. We keep them all
+# train user features
 df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_user_train_feat.p'))
 
 # interest dataframe
@@ -143,61 +127,35 @@ y_train = df_train.interest
 all_cols = train.columns.tolist()
 cat_cols = [c for c in train.columns if c.endswith("_cat")]
 
+# lgb dataset object
 lgtrain = lgb.Dataset(train,
 	label=y_train,
 	feature_name=all_cols,
 	categorical_feature = cat_cols,
 	free_raw_data=False)
 
-# ---------------------------------------------------------------
-# validation activities
-df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
-df_visits_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_visits_valid.p'))
-df_visits_valid.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
-
 # Read the validation coupon features
 df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupons_valid_feat.p'))
 df_coupons_valid_cat_feat = df_coupons_valid_feat.drop(drop_cols, axis=1)
 
-# subset users that were seeing in training
-train_users = df_interest.user_id_hash.unique()
-df_vva = df_visits_valid[df_visits_valid.user_id_hash.isin(train_users)]
-df_pva = df_purchases_valid[df_purchases_valid.user_id_hash.isin(train_users)]
+# Read the interactions during validation
+interactions_valid_dict = pickle.load(
+    open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
 
-# interactions in validation: here we will not treat differently purchases or
-# viewed. If we recommend and it was viewed or purchased, we will considered
-# it as a hit
-id_cols = ['user_id_hash', 'coupon_id_hash']
-df_interactions_valid = pd.concat([df_pva[id_cols], df_vva[id_cols]], ignore_index=True)
-df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
-	.agg({'coupon_id_hash': 'unique'})
-	.reset_index())
-tmp_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
-	index=df_interactions_valid.user_id_hash).to_dict()
-
-valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
-keep_users = []
-for user, coupons in tmp_valid_dict.items():
-	if np.intersect1d(valid_coupon_ids, coupons).size !=0:
-		keep_users.append(user)
-# out of 6923, we end up with 6070, so not bad
-interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
-
-# Take the 358 validation coupons and the 6070 users seen in training and during
-# validation and rank!
+# Build a validation dataframe with the cartesian product between the 358 validation coupons
+# and the 6071 users seen in training AND validation
 left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
 left['key'] = 0
 right = df_coupons_valid_feat[['coupon_id_hash']]
 right['key'] = 0
 df_valid = (pd.merge(left, right, on='key', how='outer')
-	.drop('key', axis=1))
+    .drop('key', axis=1))
 df_valid = pd.merge(df_valid, df_users_train_feat, on='user_id_hash')
 df_valid = pd.merge(df_valid, df_coupons_valid_cat_feat, on = 'coupon_id_hash')
 X_valid = (df_valid
-	.drop(['user_id_hash','coupon_id_hash'], axis=1)
-	.values)
+    .drop(['user_id_hash','coupon_id_hash'], axis=1)
+    .values)
 df_eval = df_valid[['user_id_hash','coupon_id_hash']]
-# -----------------------------------------------------------------------------
 
 # defining the parameter space
 lgb_parameter_space = {
@@ -211,7 +169,8 @@ lgb_parameter_space = {
     'reg_lambda': hp.uniform('reg_lambda', 0.01, 1.),
 }
 
-# METHOD1: optimize agains rmse
+# -----------------------------------------------------------------------------
+# METHOD1: optimize against rmse
 early_stop_dict = {}
 trials = Trials()
 lgb_objective.i = 0
@@ -223,6 +182,23 @@ best = fmin(fn=lgb_objective,
 best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
 best['num_leaves'] = int(best['num_leaves'])
 best['verbose'] = -1
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# METHOD2: optimize against MAP
+early_stop_dict = {}
+trials = Trials()
+lgb_objective_map.i = 0
+best = fmin(fn=lgb_objective_map,
+            space=lgb_parameter_space,
+            algo=tpe.suggest,
+            max_evals=10,
+            trials=trials)
+best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
+best['num_leaves'] = int(best['num_leaves'])
+best['verbose'] = -1
+print(1-trials.best_trial['result']['loss'])
+# -----------------------------------------------------------------------------
 
 # fit model
 model = lgb.LGBMRegressor(**best)
@@ -250,35 +226,26 @@ for k,_ in recomendations_dict.items():
 
 print(mapk(actual,pred))
 
-# METHOD2: optimize against MAP
-early_stop_dict = {}
-trials = Trials()
-lgb_objective_map.i = 0
-best = fmin(fn=lgb_objective_map,
-            space=lgb_parameter_space,
-            algo=tpe.suggest,
-            max_evals=5,
-            trials=trials)
-best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
-best['num_leaves'] = int(best['num_leaves'])
-best['verbose'] = -1
-print(1-trials.best_trial['result']['loss'])
 # -----------------------------------------------------------------------------
+# MODEL INTERPRETABILITY
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+import lime
+import shap
+
 from eli5.sklearn import PermutationImportance
 from eli5 import explain_weights_df,explain_prediction_df
+from lime.lime_tabular import LimeTabularExplainer
 
-# create our dataframe of feature importances
+# eli5
 feat_imp_df = explain_weights_df(model, feature_names=all_cols)
 feat_imp_df.head(10)
 
 X_train = train.values
 exp_pred_df = explain_prediction_df(estimator=model, doc=X_train[0], feature_names=all_cols)
 
-import lime
-from lime.lime_tabular import LimeTabularExplainer
+# lime
 explainer = LimeTabularExplainer(X_train, mode='regression',
                                  feature_names=all_cols,
                                  categorical_features=cat_cols,
@@ -287,8 +254,7 @@ explainer = LimeTabularExplainer(X_train, mode='regression',
 exp = explainer.explain_instance(X_valid[10],
                                  model.predict, num_features=20)
 
-import shap
-
+# Shap
 X_valid_rn = X_valid[random.sample(range(X_valid.shape[0]),10000)]
 shap_explainer = shap.TreeExplainer(model)
 valid_shap_vals = shap_explainer.shap_values(X_valid_rn)
