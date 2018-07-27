@@ -123,7 +123,7 @@ df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coup
 # and then turning the column into categorical. To start with, we will use
 # Method1 here.
 drop_cols = [c for c in df_coupons_train_feat.columns
-	if (('_cat' not in c) or ('method2' in c)) and (c!='coupon_id_hash')]
+    if ((not c.endswith('_cat')) or ('method2' in c)) and (c!='coupon_id_hash')]
 df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
 
 # train user features: there are a lot of features for users, both, numerical
@@ -141,7 +141,7 @@ df_train.drop(['user_id_hash','coupon_id_hash','recency_factor'], axis=1, inplac
 train = df_train.drop('interest', axis=1)
 y_train = df_train.interest
 all_cols = train.columns.tolist()
-cat_cols = [c for c in train.columns if '_cat' in c]
+cat_cols = [c for c in train.columns if c.endswith("_cat")]
 
 lgtrain = lgb.Dataset(train,
 	label=y_train,
@@ -288,6 +288,7 @@ exp = explainer.explain_instance(X_valid[10],
                                  model.predict, num_features=20)
 
 import shap
+
 X_valid_rn = X_valid[random.sample(range(X_valid.shape[0]),10000)]
 shap_explainer = shap.TreeExplainer(model)
 valid_shap_vals = shap_explainer.shap_values(X_valid_rn)

@@ -10,9 +10,13 @@ inp_dir = "../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
-# train users
+# load train users dataframe
 df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_train_feat.p'))
 train_users = df_user_train_feat.user_id_hash.unique()
+
+# validation coupons
+df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupons_valid_feat.p'))
+valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
 
 # validation activities
 df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
@@ -22,7 +26,6 @@ df_visits_valid.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_has
 # subset users that were seeing in training
 df_vva = df_visits_valid[df_visits_valid.user_id_hash.isin(train_users)]
 df_pva = df_purchases_valid[df_purchases_valid.user_id_hash.isin(train_users)]
-
 id_cols = ['user_id_hash', 'coupon_id_hash']
 df_interactions_valid = pd.concat([df_pva[id_cols], df_vva[id_cols]], ignore_index=True)
 df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
@@ -31,8 +34,7 @@ df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
 tmp_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
 	index=df_interactions_valid.user_id_hash).to_dict()
 
-valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
-
+# keep users that have interacted at least with one validation coupon
 keep_users = []
 for user, coupons in tmp_valid_dict.items():
 	if np.intersect1d(valid_coupon_ids, coupons).size !=0:

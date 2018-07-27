@@ -35,7 +35,7 @@ df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_trai
 train_users = df_user_train_feat.user_id_hash.unique()
 train_coupons = df_coupons_train_feat.coupon_id_hash.unique()
 
-# subset activities according to the users and coupons in training
+# subset activities according to the users seen in training
 df_vtr = df_visits_train[df_visits_train.user_id_hash.isin(train_users) &
 	df_visits_train.coupon_id_hash.isin(train_coupons)]
 df_ptr = df_purchases_train[df_purchases_train.user_id_hash.isin(train_users) &
