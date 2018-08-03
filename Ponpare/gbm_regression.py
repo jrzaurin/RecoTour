@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle
 import random
 import os
 import xgboost as xgb
@@ -119,6 +120,8 @@ df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
 
 df_train = pd.merge(df_interest, df_users_train_feat, on='user_id_hash')
 df_train = pd.merge(df_train, df_coupons_train_cat_feat, on = 'coupon_id_hash')
+
+# df_train['interest'] = df_train['interest'] * df_train['recency_factor']
 
 # for the time being we ignore recency
 df_train.drop(['user_id_hash','coupon_id_hash','recency_factor'], axis=1, inplace=True)
