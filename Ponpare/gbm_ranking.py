@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+import pickle
 import lightgbm as lgb
 import warnings
 import multiprocessing
@@ -43,11 +44,9 @@ df_obs_per_user = (df_train.groupby('user_id_hash')[['user_id_hash']]
 df_obs_per_user.columns = ['user_id_hash','n_obs']
 
 # For lambda_rank target needs to be categorical
+df_train['interest'] = df_train['interest'] * df_train['recency_factor']
 
-# use recency for better distributed values and split in more labels to see if
-# ranking is better
-
-interest_bins = np.percentile(df_train.interest, q=[50, 75, 90])
+interest_bins = np.percentile(df_train.interest, q=[50, 90, 95])
 df_train['interest_rank'] = df_train.interest.apply(
 	lambda x: 0
 	if x<=interest_bins[0]
@@ -61,7 +60,7 @@ df_train.drop(
 all_cols = df_train.columns.tolist()
 ignore_cols = ['user_id_hash','interest_rank']
 all_cols = [c for c in all_cols if c not in ignore_cols]
-cat_cols = [c for c in df_train.columns if '_cat' in c]
+cat_cols = [c for c in df_train.columns if c.endswith("_cat")]
 
 # sort them to ensure same order
 df_obs_per_user.sort_values('user_id_hash', inplace=True)
@@ -92,8 +91,8 @@ def lgb_objective(params):
 	params['verbose'] = -1
 
 	params['objective'] = 'lambdarank'
-	params['metric'] = 'ndcg'
-	params['eval_at'] = 5
+	params['metric'] = 'map'
+	params['eval_at'] = 10
 
 	scores=[]
 	for train_set, eval_set in  zip(train_sets, train_sets):
@@ -113,7 +112,7 @@ def lgb_objective(params):
 			valid_sets=[lgbeval],
 			early_stopping_rounds=10,
 			verbose_eval=False)
-	    scores.append(mod.best_score['valid_0']['ndcg@5'])
+		scores.append(mod.best_score['valid_0']['map@10'])
 
 	score = np.mean(scores)
 	end = time() - start
@@ -136,44 +135,19 @@ lgb_objective.i = 0
 best = fmin(fn=lgb_objective,
             space=lgb_parameter_space,
             algo=tpe.suggest,
-            max_evals=5)
+            max_evals=10)
 
 best['num_boost_round'] = int(best['num_boost_round'])
 best['num_leaves'] = int(best['num_leaves'])
 best['verbose'] = -1
 
-# validation activities
-df_purchases_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_purchases_valid.p'))
-df_visits_valid = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_visits_valid.p'))
-df_visits_valid.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
-
 # Read the validation coupon features
 df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupons_valid_feat.p'))
 df_coupons_valid_cat_feat = df_coupons_valid_feat.drop(drop_cols, axis=1)
 
-# subset users that were seeing in training
-train_users = df_interest.user_id_hash.unique()
-df_vva = df_visits_valid[df_visits_valid.user_id_hash.isin(train_users)]
-df_pva = df_purchases_valid[df_purchases_valid.user_id_hash.isin(train_users)]
-
-# interactions in validation: here we will not treat differently purchases or
-# viewed. If we recommend and it was viewed or purchased, we will considered
-# it as a hit
-id_cols = ['user_id_hash', 'coupon_id_hash']
-df_interactions_valid = pd.concat([df_pva[id_cols], df_vva[id_cols]], ignore_index=True)
-df_interactions_valid = (df_interactions_valid.groupby('user_id_hash')
-	.agg({'coupon_id_hash': 'unique'})
-	.reset_index())
-tmp_valid_dict = pd.Series(df_interactions_valid.coupon_id_hash.values,
-	index=df_interactions_valid.user_id_hash).to_dict()
-
-valid_coupon_ids = df_coupons_valid_feat.coupon_id_hash.values
-keep_users = []
-for user, coupons in tmp_valid_dict.items():
-	if np.intersect1d(valid_coupon_ids, coupons).size !=0:
-		keep_users.append(user)
-# out of 6923, we end up with 6070, so not bad
-interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
+# Read the interactions during validation
+interactions_valid_dict = pickle.load(
+    open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
 
 # Take the 358 validation coupons and the 6070 users seen in training and during
 # validation and rank!
@@ -214,4 +188,6 @@ pred = []
 for k,_ in recomendations_dict.items():
 	actual.append(list(interactions_valid_dict[k]))
 	pred.append(list(recomendations_dict[k]))
+
+print(mapk(actual,pred))
 

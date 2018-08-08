@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 inp_dir = "../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
+
 # train and validation coupons
 df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coupons_train_feat.p'))
 df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, valid_dir, 'df_coupons_valid_feat.p'))
@@ -94,12 +95,12 @@ item_factors = nmf_model.components_.T
 
 # make sure every user/item points to the right factors
 user_factors_dict = {}
-for hash_id,idx in users_idx_dict.items():
-	user_factors_dict[hash_id] = user_factors[users_idx_dict[hash_id]]
+for k,v in users_idx_dict.items():
+	user_factors_dict[k] = user_factors[users_idx_dict[k]]
 
 item_factors_dict = {}
-for hash_id,idx in items_idx_dict.items():
-	item_factors_dict[hash_id] = item_factors[items_idx_dict[hash_id]]
+for k,v in items_idx_dict.items():
+	item_factors_dict[k] = item_factors[items_idx_dict[k]]
 
 df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
 df_user_factors = (pd.DataFrame.from_dict(user_factors_dict, orient="index")

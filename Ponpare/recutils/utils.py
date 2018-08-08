@@ -19,7 +19,7 @@ def coupon_similarity_function(train_coupons_path, valid_coupons_path, method="c
 	df_coupons_train_feat['flag'] = 0
 	df_coupons_valid_feat['flag'] = 1
 
-	cat_cols = [c for c in df_coupons_train_feat.columns if '_cat' in c]
+	cat_cols = [c for c in df_coupons_train_feat.columns if c.endswith('_cat')]
 	id_cols = ['coupon_id_hash']
 	num_cols = [c for c in df_coupons_train_feat.columns if
 		(c not in cat_cols) and (c not in id_cols)]

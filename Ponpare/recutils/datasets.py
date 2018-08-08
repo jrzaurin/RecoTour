@@ -6,7 +6,7 @@ def dump_libffm_file(df, target, catdict, current_code, cat_codes, f, verbose=Fa
     with open(f, "w") as libffm_file:
         for n, r in enumerate(range(noofrows)):
             if verbose:
-                if((n%10000==0) and n!=0): print('Row',n)
+                if((n%100000==0) and n!=0): print('Row',n)
             datastring = ""
             datarow = df.iloc[r].to_dict()
             datastring += str(datarow[target])
