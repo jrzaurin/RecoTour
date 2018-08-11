@@ -16,13 +16,13 @@ def coupon_similarity_function(train_coupons_path, valid_coupons_path, method="c
 	coupons_train_ids = df_coupons_train_feat.coupon_id_hash.values
 	coupons_valid_ids = df_coupons_valid_feat.coupon_id_hash.values
 
-	df_coupons_train_feat['flag'] = 0
-	df_coupons_valid_feat['flag'] = 1
-
-	cat_cols = [c for c in df_coupons_train_feat.columns if c.endswith('_cat')]
 	id_cols = ['coupon_id_hash']
+	cat_cols = [c for c in df_coupons_train_feat.columns if c.endswith('_cat')]
 	num_cols = [c for c in df_coupons_train_feat.columns if
 		(c not in cat_cols) and (c not in id_cols)]
+
+	df_coupons_train_feat['flag'] = 0
+	df_coupons_valid_feat['flag'] = 1
 
 	tmp_df = pd.concat([
 		df_coupons_train_feat[cat_cols+['flag']],
