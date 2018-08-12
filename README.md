@@ -17,7 +17,9 @@ would not go there). The notebooks have plenty of explanations and references
 to relevant papers or packages. My intention was to focus on the code, but you
 will also find some math.
 
-Overall, this is what you will find in the notebooks:
+All the code in the notebooks has run on a **c5.4xlarge** instance or a **p2.xlarge** instance when running deep learning algorithms.
+
+This is what you will find in the notebooks:
 
 1. Data processing, with a deep dive into feature engineering
 2. Most Popular recommendations (the baseline)
