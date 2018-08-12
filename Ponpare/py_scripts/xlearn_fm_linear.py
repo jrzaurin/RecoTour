@@ -215,19 +215,19 @@ best_param['k'] = int(best_param['k'])
 best_param['task'] = 'reg'
 best_param['metric'] = 'rmse'
 
-# best_param = {'task':'reg',
-#             'lr':0.01,
-#             'lambda':0.2,
-#             'epoch':20,
-#             'k':10}
+best_param = {'task':'reg',
+            'lr':0.01,
+            'lambda': 0.05,
+            'epoch':10,
+            'k':20}
 
 xl_model = xl.create_fm()
-xl_model.setTrain(train_data_file)
-xl_model.setTest(valid_data_file)
-xl_model.fit(best_param, xlmodel_fname)
-xl_model.predict(xlmodel_fname, xlpreds_fname)
+xl_model.setTrain(train_fpath)
+xl_model.setTest(valid_fpath)
+xl_model.fit(best_param, xlmodel_fname_tmp)
+xl_model.predict(xlmodel_fname_tmp, xlpreds_fname_tmp)
 
-preds = np.loadtxt(xlpreds_fname)
+preds = np.loadtxt(xlpreds_fname_tmp)
 df_preds = df_valid[['user_id_hash','coupon_id_hash']]
 df_preds['interest'] = preds
 
