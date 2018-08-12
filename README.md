@@ -30,8 +30,10 @@ Overall, this is what you will find in the notebooks:
 9. Deep Learning based recommendations (Wide and Deep) using `pytorch`
 
 In the last notebook I have also included what it could be a good solution for
-this problem in "the real word". So, where do we go from here? These are some
-of the things I intend to include when I have the time:
+this problem in "the real word".
+
+So, where do we go from here? These are some of the things I intend to include
+when I have the time:
 
 ### Datasets
 
