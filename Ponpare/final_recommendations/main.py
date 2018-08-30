@@ -19,11 +19,11 @@ if __name__ == '__main__':
 	parser.add_argument("--org_data",
 		type=str, default=args.root_data_dir+"data",)
 	parser.add_argument("--translate_dir",
-		type=str, default=args.root_data_dir+"data_translated_tmp")
+		type=str, default=args.root_data_dir+"data_translated")
 	parser.add_argument("--documentation_dir",
 		type=str, default=args.root_data_dir+"data/documentation")
 	parser.add_argument("--processed_dir",
-		type=str, default=args.root_data_dir+"data_processed_tmp")
+		type=str, default=args.root_data_dir+"data_processed")
 
 	parser.add_argument("--translate_fname",
 		type=str, default="CAPSULE_TEXT_Translation.xlsx")

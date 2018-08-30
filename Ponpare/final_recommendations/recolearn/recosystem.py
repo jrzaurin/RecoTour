@@ -7,7 +7,7 @@ import lightgbm as lgb
 import warnings
 import multiprocessing
 
-from recolearn.metrics.average_precision import mapk
+from metrics.average_precision import mapk
 from sklearn.metrics.pairwise import pairwise_distances
 from hyperopt import hp, tpe, fmin, Trials
 
@@ -499,8 +499,8 @@ if __name__ == '__main__':
 		type=str, default="train")
 	args = parser.parse_args()
 
-	lgbopt = LGBOptimize(args.work_dir)
-	best_params = lgbopt.optimize(maxevals=5)
+	lgbopt = LGBOptimize(work_dir)
+	lgbopt.optimize(maxevals=20)
 
 	lgbrec = LGBRec(
 		args.work_dir,
