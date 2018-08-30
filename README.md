@@ -13,7 +13,14 @@ intend to be self-contained and in consequence, there is some of code
 repetition. The code is, of course, "notebook-oriented". In the future I will
 include a more modular, nicer version of the code in the directory
 `py_scrips`. If you look at it now it might burn your eyes (you are warned, I
-would not go there). The notebooks have plenty of explanations and references
+would not go there).
+
+**UPDATE**: I have included a more modular (nicer looking) version of a
+possible final solution (described in
+`Chapter16_final_solution_Recommendations.ipynb`) in the directory
+`final_recommendations`.
+
+The notebooks have plenty of explanations and references
 to relevant papers or packages. My intention was to focus on the code, but you
 will also find some math.
 
