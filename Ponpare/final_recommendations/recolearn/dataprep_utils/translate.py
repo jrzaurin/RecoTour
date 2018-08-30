@@ -3,11 +3,7 @@ import pandas as pd
 import argparse
 
 
-def translate(input_dir, output_dir, documentation_dir):
-
-	# these names will not change, we can define them within the function
-	translate_fname = "CAPSULE_TEXT_Translation.xlsx"
-	prefecture_fname = "prefecture.txt"
+def translate(input_dir, output_dir, documentation_dir, translate_fname, prefecture_fname):
 
 	translate_df = pd.read_excel(os.path.join(documentation_dir,translate_fname) ,skiprows=5)
 
@@ -69,9 +65,27 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="translate data from japanese to english")
 
-	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data",)
-	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_translated")
-	parser.add_argument("--documentation_dir", type=str, default="../datasets/Ponpare/data/documentation")
+	parser.add_argument(
+		"--root_data_dir",
+		type=str, default="/home/ubuntu/projects/RecoTour/datasets/Ponpare/",)
 	args = parser.parse_args()
 
-	translate(args.input_dir, args.output_dir, args.documentation_dir)
+	parser.add_argument("--input_dir",
+		type=str, default=args.root_data_dir+"data",)
+	parser.add_argument("--output_dir",
+		type=str, default=args.root_data_dir+"data_translated")
+	parser.add_argument("--documentation_dir",
+		type=str, default=args.root_data_dir+"data/documentation")
+	parser.add_argument("--translate_fname",
+		type=str, default="CAPSULE_TEXT_Translation.xlsx")
+	parser.add_argument("--prefecture_fname",
+		type=str, default="prefecture.txt")
+	args = parser.parse_args()
+
+	translate(
+		args.input_dir,
+		args.output_dir,
+		args.documentation_dir,
+		args.translate_fname,
+		args.prefecture_fname,
+		)
