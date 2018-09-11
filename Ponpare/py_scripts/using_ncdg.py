@@ -1,5 +1,4 @@
 import numpy as np
-import random
 
 # let's build a fake example to illustrate how one could use the normalised
 # discounted cumulative gain (ndcg) for the excercise here.
@@ -22,24 +21,26 @@ import random
 # We will implement both methods
 
 # let's assume we have 10 users
-user_ids = ['user_'+str(i) for i in 1+np.arange(10)]
+user_ids = ['user_'+str(i) for i in np.arange(10)]
 
 # and we recommend 50 coupons
-recommended_coupon_ids = ['coupon_'+str(i) for i in 1+np.arange(50)]
+recommended_coupon_ids = ['coupon_'+str(i) for i in np.arange(50)]
+n_rec = len(recommended_coupon_ids)
+
 
 # each user interacted with a number of coupons (between 1-50) during testing
-random.seed(1)
+np.random.seed(1)
 real_interactions = {}
 for user in user_ids:
-	n_coupons = random.randint(1,50)
+	n_coupons = np.random.randint(1,50)
 	coupon_ids = random.sample(recommended_coupon_ids, n_coupons)
 	interest = [random.random() for _ in range(len(coupon_ids))]
 	real_interactions[user] = dict(zip(coupon_ids,interest))
 
-random.seed(2)
+np.random.seed(2)
 recommendations = {}
 for user in user_ids:
-	interest = [random.random() for _ in range(len(recommended_coupon_ids))]
+	interest = [np.random.random() for _ in range(len(recommended_coupon_ids))]
 	recommendations[user] = dict(zip(recommended_coupon_ids,interest))
 
 # In reality what we need to evaluate is a list of dictionaries
@@ -74,7 +75,7 @@ def dcgk(actual, predicted, method=1, k=10):
 		ranked_rec = sorted([(k,v) for k,v in predicted.items()],
 			key=lambda x: x[1], reverse=True)[:k]
 		# Among these top 10 keep those that the user did interact with and their rank
-		ranked_rec = [ (i+1,k) for i,(k,v) in enumerate(ranked_rec) if k in actual.keys()]
+		ranked_rec = [ (i,k) for i,(k,v) in enumerate(ranked_rec) if k in actual.keys()]
 		# then extract the rank and the relevance (real interest)
 		ranked_scores = [(k,actual[v]) for k,v in dict(ranked_rec).items()]
 	elif method==2:
@@ -82,7 +83,7 @@ def dcgk(actual, predicted, method=1, k=10):
 		ranked_rec = sorted([(k,v) for k,v in predicted.items()],
 			key=lambda x: x[1], reverse=True)
 		# Select those that the user did interact with and their rank
-		ranked_rec = [ (i+1,k) for i,(k,v) in enumerate(ranked_rec) if k in actual.keys()]
+		ranked_rec = [ (i,k) for i,(k,v) in enumerate(ranked_rec) if k in actual.keys()]
 		# then extract the rank and the relevance (real interest) and keep min(len(actual), k)
 		ranked_scores = [(k,actual[v]) for k,v in dict(ranked_rec).items()][:min(len(actual), k)]
 
@@ -139,5 +140,63 @@ def mndcgk(actual, predicted, method=1, k=10):
 	return np.mean([ndcgk(a,p,method,k) for a,p in zip(actual,predicted)])
 
 
+# An alternative way of computing it based on
+# [https://www.kaggle.com/davidgasquez/ndcg-scorer]
+
+def dcg_score(y_true, y_score, k=10):
+    """
+    Computes the discounted cumulative gain at k.
+    This function computes the discounted cumulative gain at k
+
+    Parameters
+    ----------
+    y_true : array
+             binary array with 1 in locations corresponding to actual interactions
+    y_score : array
+             array with the scores for all recommendations
+    k : int, optional
+        The maximum number of predicted elements
+
+    Returns
+    -------
+    np.sum(gain / discounts) : double
+            discounted cumulative gain at k
+    """
+
+    rec = np.argsort(y_score)[::-1][:k]
+    y_true = np.take(y_true, rec)
+    gain = y_true
+    discounts = np.log2(np.arange(len(y_true)) + 2)
+    return np.sum(gain / discounts)
 
 
+def ndcg_score(actual, predicted, k=10):
+    """Normalized discounted cumulative gain (NDCG) at rank K.
+
+    Parameters
+    ----------
+    actual : dict
+             A dict of elements: {'item': score} for the actual interactions
+    predicted : dict
+                A dict of predicted elements {'item': score}
+    k : int, optional
+        The maximum number of predicted elements
+
+    Returns
+    -------
+    np.mean(scores) : double
+            mean normalised discounted cumulative gain at k
+    """
+
+	scores = []
+	for i, (t,r) in enumerate(zip(actual,predicted)):
+		idx = [int(c.split("_")[1]) for c in t.keys()]
+		y_true = np.zeros(n_rec, dtype='int')
+		y_true[idx] = 1
+		y_score = np.array(list(r.values()))
+		dcg = dcg_score(y_true, y_score, k)
+		idcg = dcg_score(y_true, y_true, k)
+        score = dcg / idcg
+        scores.append(score)
+
+    return np.mean(scores)
