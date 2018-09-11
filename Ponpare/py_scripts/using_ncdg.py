@@ -118,7 +118,7 @@ def ndcgk(actual, predicted, method=1, k=10):
 
 def mndcgk(actual, predicted, method=1, k=10):
 	"""
-	Normalized discounted cumulative gain (NDCG) at rank K over all recommendations
+	Mean normalized discounted cumulative gain (NDCG) at rank K over all recommendations
     Parameters
     ----------
     actual : dict
