@@ -33,7 +33,7 @@ np.random.seed(1)
 real_interactions = {}
 for user in user_ids:
 	n_coupons = np.random.randint(1,50)
-	coupon_ids = random.sample(recommended_coupon_ids, n_coupons)
+	coupon_ids = np.random.choice(recommended_coupon_ids, n_coupons)
 	interest = [random.random() for _ in range(len(coupon_ids))]
 	real_interactions[user] = dict(zip(coupon_ids,interest))
 
