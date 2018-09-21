@@ -65,6 +65,6 @@ shown in the notebooks ( the mean average precision or MAP) such as the
 Normalized Discounted Cumulative Gain
 ([NDCG](https://en.wikipedia.org/wiki/Discounted_cumulative_gain)).
 
-**UPDATE 2 (21-09-2017)**: I have included a script called `using_ncdg.py` that is intended to illustrate how one would use NDCG for the Ponpare Problem.
+**UPDATE 2 (21-09-2017)**: I have included a script called `using_ncdg.py` in the directory `py_scripts` that is intended to illustrate how one would use NDCG for the Ponpare Problem.
 
 I hope the code here is useful to someone. If you have any idea on how to improve the content of the repo, or you want to contribute, let me know.
