@@ -15,10 +15,11 @@ include a more modular, nicer version of the code in the directory
 `py_scrips`. If you look at it now it might burn your eyes (you are warned, I
 would not go there).
 
-**UPDATE**: I have included a more modular (nicer looking) version of a
+**UPDATE 1 (30-08-2017)**: I have included a more modular (nicer looking) version of a
 possible final solution (described in
 `Chapter16_final_solution_Recommendations.ipynb`) in the directory
 `final_recommendations`.
+
 
 The notebooks have plenty of explanations and references
 to relevant papers or packages. My intention was to focus on the code, but you
@@ -64,4 +65,6 @@ shown in the notebooks ( the mean average precision or MAP) such as the
 Normalized Discounted Cumulative Gain
 ([NDCG](https://en.wikipedia.org/wiki/Discounted_cumulative_gain)).
 
-Anyway, I hope the code here is useful to someone. If you have any idea on how to improve the content of the repo, or you want to contribute, let me know.
+**UPDATE 2**: I have included a script called `using_ncdg.py` that is intended to illustrate how one would use NDCG for the Ponpare Problem.
+
+I hope the code here is useful to someone. If you have any idea on how to improve the content of the repo, or you want to contribute, let me know.
