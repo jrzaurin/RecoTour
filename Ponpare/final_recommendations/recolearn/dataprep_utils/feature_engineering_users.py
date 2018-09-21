@@ -9,6 +9,68 @@ from functools import reduce
 from collections import Counter
 
 
+def user_features(work_dir, is_validation):
+
+	print('INFO: building user features')
+
+	if is_validation:
+		train_dir = os.path.join(work_dir, 'train')
+	else:
+		train_dir = os.path.join(work_dir, 'ftrain')
+
+	# Load interactions, user features, train coupons features and dictionary
+	# of mappings
+	df_visits_train = pd.read_pickle(os.path.join(train_dir, 'df_visits_train.p'))
+	df_purchases_train = pd.read_pickle(os.path.join(train_dir, 'df_purchases_train.p'))
+	df_users_train = pd.read_pickle(os.path.join(train_dir, 'df_users_train.p'))
+	df_coupon_train = pd.read_pickle(os.path.join(train_dir, 'df_coupons_train_feat.p'))
+	dict_of_mappings = pickle.load(open(os.path.join(work_dir, 'dict_of_mappings.p'), 'rb') )
+
+	active_users = list(
+		set(
+			list(df_visits_train.user_id_hash.unique()) +
+			list(df_purchases_train.user_id_hash.unique())
+			)
+		)
+	inactive_users = np.setdiff1d(list(df_users_train.user_id_hash.unique()), active_users)
+
+	# df_users_train_active     (df_utr)
+	# df_visits_train_active    (df_vtr)
+	# df_purchases_train_active (df_ptr)
+	df_utr = df_users_train[~df_users_train.user_id_hash.isin(inactive_users)]
+	df_utr.drop(['reg_date','withdraw_date','days_to_present'], axis=1, inplace=True)
+	df_vtr = df_visits_train[df_visits_train.user_id_hash.isin(df_utr.user_id_hash)]
+	df_ptr = df_purchases_train[df_purchases_train.user_id_hash.isin(df_utr.user_id_hash)]
+
+	# 1. Features based on "demographics" (_d)
+	dict_of_mappings, df_user_feat_d = demographic_features(df_utr , dict_of_mappings)
+
+	# 2. Features based on purchase behaviour (_p):
+	df_user_feat_p = purchase_behaviour_features(df_ptr , dict_of_mappings)
+
+	# 3. User features based on visit behaviour (_v):
+	df_user_feat_v = visits_behaviour_features(df_vtr)
+
+	# 4. User features based on "general behaviour" (type, price, etc)
+	df_user_feat_g_p = general_behaviour_features(df_ptr, df_coupon_train, action='purchases')
+	df_user_feat_g_v = general_behaviour_features(df_vtr, df_coupon_train, action='visits')
+	df_user_feat_g = pd.merge(df_user_feat_g_p, df_user_feat_g_v, on='user_id_hash', how='outer')
+
+	# 5. merge all dataframes
+	final_list_of_dfs = [df_user_feat_d, df_user_feat_g, df_user_feat_v, df_user_feat_p]
+	df_user_feat = reduce(lambda left,right: pd.merge(left,right,on=['user_id_hash'],how='outer'), final_list_of_dfs)
+
+	# There are 116 users in training that visit but never bought:
+	# df_utr[(df_utr.user_id_hash.isin(df_vtr.user_id_hash)) & \
+	# (~df_utr.user_id_hash.isin(df_ptr.user_id_hash))].shape
+	# For them all columns in df_user_feat_p will be -1
+	dict_of_mappings, df_user_feat = fillna_with_minus_one(df_user_feat, dict_of_mappings)
+
+	# Save files
+	df_user_feat.to_pickle(os.path.join(train_dir,"df_users_train_feat.p"))
+	pickle.dump(dict_of_mappings, open(os.path.join(work_dir, 'dict_of_mappings.p'), 'wb') )
+
+
 def demographic_features(df_inp, dict_of_mappings):
 
 	df = df_inp.copy()
@@ -218,7 +280,10 @@ def fillna_with_minus_one(df_inp, dict_of_mappings):
 
 
 def top_values_df(df, col, mappings=None, top_n=2):
-
+	"""
+	Returns a dataframe with columns are the top "tokens" the user interacted
+	with. For example, topN coupon category
+	"""
 	newcolname = 'top_' + col
 	topcolnames = ['top'+ str(i+1) + '_' + col for i in range(top_n)]
 
@@ -240,6 +305,10 @@ def top_values_df(df, col, mappings=None, top_n=2):
 
 
 def top_values(row, top_n=2):
+	"""
+	Helper function that returns a list with the  top "tokens" the user
+	interacted with (on a row basis)
+	"""
 	counts = [c[0] for c in Counter(row).most_common()]
 	row_len = len(set(row))
 	if row_len < top_n:
@@ -264,68 +333,6 @@ def time_diff(row, all_metrics=False):
 		return [min_diff, max_diff, median_diff]
 	else:
 		return median_diff
-
-
-def user_features(work_dir, is_validation):
-
-	print('INFO: building user features')
-
-	if is_validation:
-		train_dir = os.path.join(work_dir, 'train')
-	else:
-		train_dir = os.path.join(work_dir, 'ftrain')
-
-	# Load interactions, user features, train coupons features and dictionary
-	# of mappings
-	df_visits_train = pd.read_pickle(os.path.join(train_dir, 'df_visits_train.p'))
-	df_purchases_train = pd.read_pickle(os.path.join(train_dir, 'df_purchases_train.p'))
-	df_users_train = pd.read_pickle(os.path.join(train_dir, 'df_users_train.p'))
-	df_coupon_train = pd.read_pickle(os.path.join(train_dir, 'df_coupons_train_feat.p'))
-	dict_of_mappings = pickle.load(open(os.path.join(work_dir, 'dict_of_mappings.p'), 'rb') )
-
-	active_users = list(
-		set(
-			list(df_visits_train.user_id_hash.unique()) +
-			list(df_purchases_train.user_id_hash.unique())
-			)
-		)
-	inactive_users = np.setdiff1d(list(df_users_train.user_id_hash.unique()), active_users)
-
-	# df_users_train_active     (df_utr)
-	# df_visits_train_active    (df_vtr)
-	# df_purchases_train_active (df_ptr)
-	df_utr = df_users_train[~df_users_train.user_id_hash.isin(inactive_users)]
-	df_utr.drop(['reg_date','withdraw_date','days_to_present'], axis=1, inplace=True)
-	df_vtr = df_visits_train[df_visits_train.user_id_hash.isin(df_utr.user_id_hash)]
-	df_ptr = df_purchases_train[df_purchases_train.user_id_hash.isin(df_utr.user_id_hash)]
-
-	# 1. Features based on "demographics" (_d)
-	dict_of_mappings, df_user_feat_d = demographic_features(df_utr , dict_of_mappings)
-
-	# 2. Features based on purchase behaviour (_p):
-	df_user_feat_p = purchase_behaviour_features(df_ptr , dict_of_mappings)
-
-	# 3. User features based on visit behaviour (_v):
-	df_user_feat_v = visits_behaviour_features(df_vtr)
-
-	# 4. User features based on "general behaviour" (type, price, etc)
-	df_user_feat_g_p = general_behaviour_features(df_ptr, df_coupon_train, action='purchases')
-	df_user_feat_g_v = general_behaviour_features(df_vtr, df_coupon_train, action='visits')
-	df_user_feat_g = pd.merge(df_user_feat_g_p, df_user_feat_g_v, on='user_id_hash', how='outer')
-
-	# 5. merge all dataframes
-	final_list_of_dfs = [df_user_feat_d, df_user_feat_g, df_user_feat_v, df_user_feat_p]
-	df_user_feat = reduce(lambda left,right: pd.merge(left,right,on=['user_id_hash'],how='outer'), final_list_of_dfs)
-
-	# There are 116 users in training that visit but never bought:
-	# df_utr[(df_utr.user_id_hash.isin(df_vtr.user_id_hash)) & \
-	# (~df_utr.user_id_hash.isin(df_ptr.user_id_hash))].shape
-	# For them all columns in df_user_feat_p will be -1
-	dict_of_mappings, df_user_feat = fillna_with_minus_one(df_user_feat, dict_of_mappings)
-
-	# Save files
-	df_user_feat.to_pickle(os.path.join(train_dir,"df_users_train_feat.p"))
-	pickle.dump(dict_of_mappings, open(os.path.join(work_dir, 'dict_of_mappings.p'), 'wb') )
 
 
 if __name__ == '__main__':

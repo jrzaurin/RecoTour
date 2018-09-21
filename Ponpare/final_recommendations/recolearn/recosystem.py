@@ -16,8 +16,19 @@ cores = multiprocessing.cpu_count()
 
 
 class Interactions(object):
+    """
+    Builds a dictionary of interactions {user_id: [coupon_ids]} for testing
+
+    Parameters:
+    --------
+    is_hot: boolean
+    	boolean indicating if the interactions dictionary is for users who
+    	were seen during training (hot) or not (cold)
+    """
+
 	def __init__(self, is_hot):
 		self.is_hot = is_hot
+
 
 	def interactions_dictionary(self, df_purchases_eval, df_visits_eval, df_metric):
 
@@ -56,7 +67,9 @@ class Interactions(object):
 
 
 class MPRec(Interactions):
-
+	"""
+	Computes most popular recommendations (MPRec)
+	"""
 	def __init__(self, work_dir, train_dir):
 		super(MPRec, self).__init__(is_hot=False)
 
@@ -111,7 +124,10 @@ class MPRec(Interactions):
 
 
 	def test_coupons_popularity(self):
-
+		"""
+		Method to compute test-coupon popularity based on similarity to most
+		popular coupons during training period
+		"""
 		if not self.train_path:
 			self.set_experiment()
 
@@ -192,6 +208,9 @@ class MPRec(Interactions):
 
 
 class LGBDataprep(Interactions):
+	"""
+	Helper class to prepare the datasets for lightgbm
+	"""
 	def __init__(self):
 		super(LGBDataprep, self).__init__(is_hot=True)
 
@@ -252,6 +271,9 @@ class LGBDataprep(Interactions):
 
 
 class LGBOptimize(LGBDataprep):
+	"""
+	Hyper Parameter optimization
+	"""
 	def __init__(self, work_dir):
 		super(LGBDataprep, self).__init__(is_hot=True)
 
@@ -401,6 +423,10 @@ class LGBOptimize(LGBDataprep):
 
 
 class LGBRec(LGBDataprep):
+	"""
+	lightgbm recommendations
+	"""
+
 	def __init__(self, work_dir, train_dir):
 		super(LGBDataprep, self).__init__(is_hot=True)
 
@@ -476,6 +502,9 @@ def compute_mapk(interactions_dict, recomendations_dict):
 
 
 def load_interactions_test_data(work_dir, train_dir):
+	"""
+	Simple helper to load datasets. Mostly for readability
+	"""
 	df_purchases_test = pd.read_pickle(os.path.join(work_dir, 'test', 'df_purchases_test.p'))
 	df_visits_test = pd.read_pickle(os.path.join(work_dir, 'test', 'df_visits_test.p'))
 	df_visits_test.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)

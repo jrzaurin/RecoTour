@@ -4,6 +4,10 @@ import argparse
 
 
 def translate(input_dir, output_dir, documentation_dir, translate_fname, prefecture_fname):
+	"""
+	This and most of the functions here are highly customized to the problem
+	we are trying to solve.
+	"""
 
 	translate_df = pd.read_excel(os.path.join(documentation_dir,translate_fname) ,skiprows=5)
 

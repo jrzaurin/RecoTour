@@ -7,6 +7,15 @@ import os
 def split_data(input_dir, output_dir, users_list, coupon_list,
 	purchase_log, viewing_log, test_period, is_validation):
 
+	"""
+	highly customized function to split the dataset into train/val/test
+
+	Params (only describing those that are not trivial to understand)
+	---------
+	test_period: integer
+		time range (days) to be used to split the data
+	"""
+
 	# the master list of users in the dataset
 	df_users = pd.read_csv(os.path.join(input_dir,users_list))
 	df_users['reg_date'] =  pd.to_datetime(df_users.reg_date, infer_datetime_format=True)
@@ -42,6 +51,11 @@ def split_data(input_dir, output_dir, users_list, coupon_list,
 
 
 def save_dset(df, df_name, date_column, present, test_period, output_dir, is_validation):
+	"""
+	Simple helper to structure and save the datasets depending on the set up,
+	whether is using a validation dataset or not.
+	"""
+
 
 	print('INFO: splitting {}'.format(df_name.split('_')[1]))
 	# set names depending the experiment we are running
@@ -83,7 +97,10 @@ def save_dset(df, df_name, date_column, present, test_period, output_dir, is_val
 
 
 def flag_dset(df, date_column, present, test_period, is_validation):
-
+	"""
+	helper to flag data (0,1,2) depending on whether the dataset is
+	(test,val,train)
+	"""
 	df = days_to_present_col(df, present, date_column)
 
 	if is_validation:

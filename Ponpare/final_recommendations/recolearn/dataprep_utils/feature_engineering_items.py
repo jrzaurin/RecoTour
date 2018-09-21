@@ -9,59 +9,6 @@ import pdb
 from scipy import stats
 
 
-def fillna_method1(df, col, isdayofweek=False, q=None):
-
-	newcolname = col + "_method1_cat"
-
-	if isdayofweek:
-		df[newcolname] = df[col].dt.dayofweek
-		df[newcolname] = df[newcolname].fillna(7).astype('int')
-		return df
-	else:
-		df[newcolname], bins_method1 = pd.qcut(df[col], q=q, labels=np.arange(q), retbins=True)
-		df[newcolname].cat.add_categories([q], inplace=True)
-		df[newcolname].fillna(q, inplace=True)
-		return df, bins_method1
-
-
-def fillna_method2(df, col, fillby, nanlimit=50, seed=1981, isdayofweek=False, bins=None):
-
-	newcolname = col + "_method2_cat"
-
-	if isdayofweek:
-		colmode = df[col].dt.dayofweek.mode().values[0]
-		df[newcolname] = df[col].dt.dayofweek
-		df = fill_loop(df, newcolname, fillby, colmode, nanlimit, seed, isdayofweek)
-		df[newcolname] = df[newcolname].astype('int')
-	else:
-		colmode = df[col].mode().values[0]
-		df = fill_loop(df, col, fillby, colmode, nanlimit, seed, isdayofweek)
-		df[newcolname] = pd.cut(df[col], bins=bins, labels=np.arange(len(bins)-1), include_lowest=True)
-		df[col] = df[col].astype('int')
-
-	return df
-
-
-def fill_loop(df, col, fillby, colmode, nanlimit, seed, isdayofweek):
-
-	fillby_vals = list(df[df[col].isna()][fillby].value_counts().index)
-
-	for fb in fillby_vals:
-		non_nan_values = df[(df[fillby] == fb) & (~df[col].isna())][col].values
-		nan_idx = list(df[(df[fillby] == fb) & (df[col].isna())].index)
-		if (len(nan_idx)>nanlimit) & (non_nan_values.size>0):
-			np.random.seed(seed)
-			replace_vals = np.random.choice(non_nan_values, len(nan_idx))
-			df.loc[nan_idx, col] = replace_vals
-		elif (len(nan_idx)<=nanlimit) & (non_nan_values.size>0):
-			df.loc[nan_idx, col] = \
-			stats.mode(non_nan_values).mode[0] if isdayofweek else np.median(non_nan_values)
-		elif non_nan_values.size==0:
-			df.loc[nan_idx, col] = colmode
-
-	return df
-
-
 def coupon_features(work_dir, is_validation):
 
 	print('INFO: building coupong features')
@@ -176,6 +123,75 @@ def coupon_features(work_dir, is_validation):
 
 	# save dictionary of mappings
 	pickle.dump(dict_of_mappings, open(os.path.join(work_dir, 'dict_of_mappings.p'), 'wb') )
+
+
+def fillna_method1(df, col, isdayofweek=False, q=None):
+	"""
+	fill NaN simply considering them as a new category
+	"""
+	newcolname = col + "_method1_cat"
+
+	if isdayofweek:
+		df[newcolname] = df[col].dt.dayofweek
+		df[newcolname] = df[newcolname].fillna(7).astype('int')
+		return df
+	else:
+		df[newcolname], bins_method1 = pd.qcut(df[col], q=q, labels=np.arange(q), retbins=True)
+		df[newcolname].cat.add_categories([q], inplace=True)
+		df[newcolname].fillna(q, inplace=True)
+		return df, bins_method1
+
+
+def fillna_method2(df, col, fillby, nanlimit=50, seed=1981, isdayofweek=False, bins=None):
+	"""
+	fill NaN replacing values per category
+	"""
+
+	newcolname = col + "_method2_cat"
+
+	if isdayofweek:
+		colmode = df[col].dt.dayofweek.mode().values[0]
+		df[newcolname] = df[col].dt.dayofweek
+		df = fill_loop(df, newcolname, fillby, colmode, nanlimit, seed, isdayofweek)
+		df[newcolname] = df[newcolname].astype('int')
+	else:
+		colmode = df[col].mode().values[0]
+		df = fill_loop(df, col, fillby, colmode, nanlimit, seed, isdayofweek)
+		df[newcolname] = pd.cut(df[col], bins=bins, labels=np.arange(len(bins)-1), include_lowest=True)
+		df[col] = df[col].astype('int')
+
+	return df
+
+
+def fill_loop(df, col, fillby, colmode, nanlimit, seed, isdayofweek):
+	"""
+	conditions to be used to fill NaN when using method 2.
+	We fill per category.
+
+	cond1: there are more NaN than nanlimit and at least one non NaN value
+		replace at random
+	cond2: there are less NaN than nanlimit and at least one non NaN value
+		replace with the mode if isdayofweek, else with the median
+	cond3: there are non non_nan_values for that particular category
+		replace with colmode
+	"""
+	fillby_vals = list(df[df[col].isna()][fillby].value_counts().index)
+
+	for fb in fillby_vals:
+		non_nan_values = df[(df[fillby] == fb) & (~df[col].isna())][col].values
+		nan_idx = list(df[(df[fillby] == fb) & (df[col].isna())].index)
+		if (len(nan_idx)>nanlimit) & (non_nan_values.size>0):
+			np.random.seed(seed)
+			replace_vals = np.random.choice(non_nan_values, len(nan_idx))
+			df.loc[nan_idx, col] = replace_vals
+		elif (len(nan_idx)<=nanlimit) & (non_nan_values.size>0):
+			df.loc[nan_idx, col] = \
+			stats.mode(non_nan_values).mode[0] if isdayofweek else np.median(non_nan_values)
+		elif non_nan_values.size==0:
+			df.loc[nan_idx, col] = colmode
+
+	return df
+
 
 if __name__ == '__main__':
 

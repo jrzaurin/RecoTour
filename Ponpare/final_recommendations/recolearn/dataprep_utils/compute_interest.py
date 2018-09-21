@@ -5,33 +5,6 @@ import argparse
 import pickle
 
 
-def sigmoid(x, xmid, tau, top):
-	"""
-	Sigmoid with upper limit
-	"""
-	return top / (1. + np.exp(-(x-xmid)/tau))
-
-
-def combined_linear(x, xmid, ylow, ymid, ytop):
-	"""
-	Truncated straight lines
-	"""
-	m1 = (ymid-ylow)/(xmid)
-	b1 = ylow
-
-	x2 = np.max(x)
-	m2 = (ytop-ymid)/(x2-xmid)
-	b2 = ymid-(m2*xmid)
-
-	x1_range = x[np.where(x<=xmid)[0]]
-	x2_range = x[np.where(x>xmid)[0]]
-
-	l1 = m1*x1_range + b1
-	l2 = m2*x2_range + b2
-
-	return np.hstack([l1,l2])
-
-
 def interest_dataframe(work_dir, is_validation, recency):
 
 	if is_validation:
@@ -109,6 +82,33 @@ def interest_dataframe(work_dir, is_validation, recency):
 		print("INFO: interest computed without taking into accoun recency")
 
 	df_interest.to_pickle(os.path.join(train_dir, 'df_interest.p'))
+
+
+def sigmoid(x, xmid, tau, top):
+	"""
+	Sigmoid with upper limit
+	"""
+	return top / (1. + np.exp(-(x-xmid)/tau))
+
+
+def combined_linear(x, xmid, ylow, ymid, ytop):
+	"""
+	Truncated straight lines
+	"""
+	m1 = (ymid-ylow)/(xmid)
+	b1 = ylow
+
+	x2 = np.max(x)
+	m2 = (ytop-ymid)/(x2-xmid)
+	b2 = ymid-(m2*xmid)
+
+	x1_range = x[np.where(x<=xmid)[0]]
+	x2_range = x[np.where(x>xmid)[0]]
+
+	l1 = m1*x1_range + b1
+	l2 = m2*x2_range + b2
+
+	return np.hstack([l1,l2])
 
 
 if __name__ == '__main__':
