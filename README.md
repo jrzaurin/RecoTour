@@ -38,9 +38,10 @@ This is what you will find in the notebooks:
 7. Factorization Machines recommendations using `xlearn`
 8. Field Aware Factorization Machines recommendations using `xlearn`
 9. Deep Learning based recommendations (Wide and Deep) using `pytorch`
+10. Neural Collaborative Filtering using the movielens dataset can be found in a companion [repo](https://github.com/jrzaurin/neural_cf)
 
-In the last notebook I have also included what it could be a good solution for
-this problem in "the real word".
+I have included a notebook with what it could be a good solution for this
+problem in "the real word".
 
 So, where do we go from here? These are some of the things I intend to include
 when I have the time:
@@ -55,6 +56,9 @@ containing text, images if possible and user behavior.
 
 1. Graph based recommendation algorithms
 2. [Neural Collaborative Filtering](https://www.comp.nus.edu.sg/~xiangnan/papers/ncf.pdf)
+
+	**UPDATE: 17-10-2017:** Neural collaborative Filtering has been added in a companion [repo](https://github.com/jrzaurin/neural_cf).
+
 3. [Sequence based recommendation algorithms](https://florianwilhelm.info/2018/08/multiplicative_LSTM_for_sequence_based_recos/)
 4. Others...
 
