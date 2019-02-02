@@ -15,7 +15,7 @@ include a more modular, nicer version of the code in the directory
 `py_scrips`. If you look at it now it might burn your eyes (you are warned, I
 would not go there).
 
-**UPDATE 1 (30-08-2017)**: I have included a more modular (nicer looking) version of a
+**UPDATE 1 (30-08-2018)**: I have included a more modular (nicer looking) version of a
 possible final solution (described in
 `Chapter16_final_solution_Recommendations.ipynb`) in the directory
 `final_recommendations`.
@@ -57,7 +57,7 @@ containing text, images if possible and user behavior.
 1. Graph based recommendation algorithms
 2. [Neural Collaborative Filtering](https://www.comp.nus.edu.sg/~xiangnan/papers/ncf.pdf)
 
-	**UPDATE: 17-10-2017:** Neural collaborative Filtering has been added in a companion [repo](https://github.com/jrzaurin/neural_cf).
+	**UPDATE: 17-10-2018:** Neural collaborative Filtering has been added in a companion [repo](https://github.com/jrzaurin/neural_cf).
 
 3. [Sequence based recommendation algorithms](https://florianwilhelm.info/2018/08/multiplicative_LSTM_for_sequence_based_recos/)
 4. Others...
@@ -69,6 +69,6 @@ shown in the notebooks ( the mean average precision or MAP) such as the
 Normalized Discounted Cumulative Gain
 ([NDCG](https://en.wikipedia.org/wiki/Discounted_cumulative_gain)).
 
-	**UPDATE 2 (21-09-2017)**: I have included a script called `using_ncdg.py` in the directory `py_scripts` that is intended to illustrate how one would use NDCG for the Ponpare Problem.
+	**UPDATE 2 (21-09-2018)**: I have included a script called `using_ncdg.py` in the directory `py_scripts` that is intended to illustrate how one would use NDCG for the Ponpare Problem.
 
 I hope the code here is useful to someone. If you have any idea on how to improve the content of the repo, or you want to contribute, let me know.
