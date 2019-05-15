@@ -30,6 +30,7 @@ def standard_split(df, data_path):
 
 def neuralcf_split(df, data_path):
 	# Xiangnan He, et al, 2017 train/test split with implicit negative feedback
+
 	# sort by rank
 	dfc = df.copy()
 
@@ -67,8 +68,8 @@ def neuralcf_split(df, data_path):
 	print("sampling for negative feedback took {} min".format(round(end/60,2)))
 
 	# manipulating the df to look like this:
-     # positive  item_n0  item_n1  item_n2  item_n3  item_n4  item_n5  item_n6  ...
-     # (0, 522)    27984    22902    28875    35434    28240    32183    46373  ...
+	# positive  item_n0  item_n1  item_n2  item_n3  item_n4  item_n5  item_n6  ...
+	# (0, 522)    27984    22902    28875    35434    28240    32183    46373  ...
 	negative['negative'] = non_rated_items
 	negative.drop('item', axis=1, inplace=True)
 	negative= test.merge(negative, on='user')
