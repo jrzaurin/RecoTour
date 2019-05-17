@@ -1,31 +1,37 @@
 import numpy as np
 import pandas as pd
+import gzip
+import pickle
 import argparse
+import scipy.sparse as sp
 
-from pathlib import Path
 from time import time
+from pathlib import Path
+from scipy.sparse import save_npz
 from joblib import Parallel, delayed
 from sklearn.model_selection import train_test_split
+
+
+def array2mtx(interactions):
+    num_users = interactions[:,0].max()
+    num_items = interactions[:,1].max()
+    mat = sp.dok_matrix((num_users+1, num_items+1), dtype=np.float32)
+    for user, item, rating in interactions:
+            mat[user, item] = rating
+    return mat.tocsr()
 
 
 def standard_split(df, data_path):
 
 	# Cardinality
-	n_user = df.user.nunique()
-	n_item = df.item.nunique()
-	n_rank = df['rank'].nunique()
-
-	# train/test split
-	features = ['user', 'item', 'rank']
-	target = ['rating']
-	X = df[features].values.astype(np.int32)
-	y = df[target].values.astype(np.float32)
-	train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.2, random_state=1)
+	n_users = df.user.nunique()
+	n_items = df.item.nunique()
+	n_ranks = df['rank'].nunique()
+	train, test, = train_test_split(df.values.astype(np.int64), test_size=0.2, random_state=1)
 
 	# Save
-	np.savez(data_path/"standard_split.npz", train_x=train_x, train_y=train_y,
-		test_x=test_x, test_y=test_y, n_user=n_user, n_item=n_item,
-		n_ranks=n_rank)
+	np.savez(data_path/"standard_split.npz", train=train, test=test, n_users=n_users,
+		n_items=n_items, n_ranks=n_ranks, columns=df.columns.tolist())
 
 
 def neuralcf_split(df, data_path):
@@ -35,8 +41,8 @@ def neuralcf_split(df, data_path):
 	dfc = df.copy()
 
 	# Cardinality
-	n_user = dfc.user.nunique()
-	n_item = dfc.item.nunique()
+	n_users = df.user.nunique()
+	n_items = df.item.nunique()
 
 	dfc.sort_values(['user','rank'], ascending=[True,True], inplace=True)
 	dfc.reset_index(inplace=True, drop=True)
@@ -46,16 +52,15 @@ def neuralcf_split(df, data_path):
 	train = pd.merge(dfc, test, on=['user','item'],
 		how='outer', suffixes=('', '_y'))
 	train = train[train.rating_y.isnull()]
-	test = test[['user','item','rating', 'rank']]
-	train = train[['user','item','rating', 'rank']]
+	test = test[['user','item','rating']]
+	train = train[['user','item','rating']]
 
-	# select 99 random movies per user that were never rated
+	# select 99 random movies per user that were never rated by that user
 	all_items = dfc.item.unique()
-	negative = (dfc.groupby("user")['item']
+	rated_items = (dfc.groupby("user")['item']
 	    .apply(list)
 	    .reset_index()
-	    )
-	rated_items = negative.item.tolist()
+	    ).item.tolist()
 
 	def sample_not_rated(item_list, rseed=1, n=99):
 		np.random.seed=rseed
@@ -67,30 +72,29 @@ def neuralcf_split(df, data_path):
 	end = time() - start
 	print("sampling for negative feedback took {} min".format(round(end/60,2)))
 
-	# manipulating the df to look like this:
-	# positive  item_n0  item_n1  item_n2  item_n3  item_n4  item_n5  item_n6  ...
-	# (0, 522)    27984    22902    28875    35434    28240    32183    46373  ...
-	negative['negative'] = non_rated_items
-	negative.drop('item', axis=1, inplace=True)
-	negative= test.merge(negative, on='user')
-	negative['positive'] = negative[['user', 'item']].apply(tuple, axis=1)
-	negative.drop(['user','item', 'rating', 'rank'], axis=1, inplace=True)
-	negative = negative[['positive','negative']]
-	negative[['item_n'+str(i) for i in range(99)]] = \
+	negative = pd.DataFrame({'negative':non_rated_items})
+	negative[['item_n'+str(i) for i in range(99)]] =\
 		pd.DataFrame(negative.negative.values.tolist(), index= negative.index)
 	negative.drop('negative', axis=1, inplace=True)
-
-	features = ['user', 'item', 'rank']
-	target = ['rating']
-	train_x = train[features].values.astype(np.int32)
-	train_y = train[target].values.astype(np.float32)
-	test_x = test[features].values.astype(np.int32)
-	test_y = test[target].values.astype(np.float32)
+	negative = negative.stack().reset_index()
+	negative = negative.iloc[:, [0,2]]
+	negative.columns = ['user','item']
+	negative['rating'] = 0
+	assert negative.shape[0] == len(non_rated_items)*99
+	test_negative = (pd.concat([test,negative])
+		.sort_values('user', ascending=True)
+		.reset_index(drop=True)
+		)
 
 	# Save
-	np.savez(data_path/"neuralcf_split.npz", train_x=train_x, train_y=train_y,
-		test_x=test_x, test_y=test_y, negative=negative.values, n_user=n_user,
-		n_item=n_item)
+	np.savez(data_path/"neuralcf_split.npz", train=train.values, test=test.values,
+		test_negative=test_negative.values, negatives=np.array(non_rated_items),
+		n_users=n_users, n_items=n_items)
+
+	# Save training as sparse matrix
+	print("saving training set as sparse matrix...")
+	train_mtx = array2mtx(train.values)
+	save_npz(data_path/"neuralcf_train_sparse.npz", train_mtx)
 
 
 def prepare_amazon(data_path, input_fname):
@@ -111,6 +115,10 @@ def prepare_amazon(data_path, input_fname):
 	item_mappings = {k:v for v,k in enumerate(df.item.unique())}
 	df['user'] = df['user'].map(user_mappings)
 	df['item'] = df['item'].map(item_mappings)
+	df = df[['user','item','rank','rating']].astype(np.int64)
+
+	pickle.dump(user_mappings, open(data_path/'user_mappings.p', 'wb'))
+	pickle.dump(item_mappings, open(data_path/'item_mappings.p', 'wb'))
 
 	standard_split(df, data_path)
 	neuralcf_split(df, data_path)
@@ -121,10 +129,11 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="prepare Amazon dataset")
 
 	parser.add_argument("--input_dir",type=str, default="/home/ubuntu/projects/RecoTour/datasets/Amazon")
-	parser.add_argument("--input_fname",type=str, default="reviews_Movies_and_TV_5.json")
+	parser.add_argument("--input_fname",type=str, default="reviews_Movies_and_TV_5.json.gz")
 	args = parser.parse_args()
 
 	DATA_PATH = Path(args.input_dir)
 	reviews = args.input_fname
 
 	prepare_amazon(DATA_PATH, reviews)
+
