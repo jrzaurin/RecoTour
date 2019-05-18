@@ -85,6 +85,10 @@ def neuralcf_split(df, data_path):
 		.sort_values('user', ascending=True)
 		.reset_index(drop=True)
 		)
+	# Ensuring that the 1st element every 100 is the rated item. This is
+	# fundamental for testing
+	test_negative.sort_values(['user', 'rating'], ascending=[True,False], inplace=True)
+	assert np.all(test_negative.values[0::100][:,2] != 0)
 
 	# Save
 	np.savez(data_path/"neuralcf_split.npz", train=train.values, test=test.values,

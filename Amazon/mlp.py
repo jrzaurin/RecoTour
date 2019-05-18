@@ -17,6 +17,7 @@ from torch import nn
 from torch.optim.lr_scheduler import CyclicLR
 from torch.utils.data import DataLoader, Dataset
 from utils import get_train_instances, get_scores
+from gmf import train, evaluate, checkpoint
 
 
 def parse_args():
@@ -34,106 +35,68 @@ def parse_args():
         help="number of epochs.")
     parser.add_argument("--batch_size", type=int, default=256,
         help="batch size.")
-    parser.add_argument("--n_emb", type=int, default=8,
-        help="embedding size.")
+    parser.add_argument("--layers", type=str, default="[64,32,16,8]",
+        help="layer architecture. The first elements is used for the embedding \
+        layers and equals n_emb*2")
+    parser.add_argument("--dropouts", type=str, default="[0,0,0]",
+        help="dropout per dense layer. len(dropouts) = len(layers)-1")
+    parser.add_argument("--l2reg", type=float, default=0.,
+        help="l2 regularization")
     parser.add_argument("--lr", type=float, default=0.01,
         help="if lr_scheduler this will be max_lr")
     parser.add_argument("--learner", type=str, default="adam",
         help="Specify an optimizer: adagrad, adam, rmsprop, sgd")
     parser.add_argument("--lr_scheduler", action="store_true",
-        help="boolean to set the use of CyclicLR during training")
+        help="use CyclicLR during training")
     parser.add_argument("--validate_every", type=int, default=1,
         help="validate every n epochs")
     parser.add_argument("--save_model", type=int, default=1)
     parser.add_argument("--n_neg", type=int, default=4,
-        help="number of negative instances to consider per positive instance")
+        help="number of negative instances to consider per positive instance.")
     parser.add_argument("--topk", type=int, default=10,
-        help="number of items to retrieve for recommendation")
+        help="number of items to retrieve for recommendation.")
 
     return parser.parse_args()
 
 
-class GMF(nn.Module):
-    def __init__(self, n_user, n_item, n_emb=8):
-        super(GMF, self).__init__()
+class MLP(nn.Module):
+    """
+    Concatenate Embeddings that are then passed through a series of Dense
+    layers
+    """
+    def __init__(self, n_user, n_item, layers, dropouts):
+        super(MLP, self).__init__()
 
-        self.n_emb = n_emb
+        self.layers = layers
+        self.n_layers = len(layers)
+        self.dropouts = dropouts
         self.n_user = n_user
         self.n_item = n_item
 
-        self.embeddings_user = nn.Embedding(n_user, n_emb)
-        self.embeddings_item = nn.Embedding(n_item, n_emb)
-        self.out = nn.Linear(in_features=n_emb, out_features=1)
+        self.embeddings_user = nn.Embedding(n_user, int(layers[0]/2))
+        self.embeddings_item = nn.Embedding(n_item, int(layers[0]/2))
+
+        self.mlp = nn.Sequential()
+        for i in range(1,self.n_layers):
+            self.mlp.add_module("linear%d" %i, nn.Linear(layers[i-1],layers[i]))
+            self.mlp.add_module("relu%d" %i, torch.nn.ReLU())
+            self.mlp.add_module("dropout%d" %i , torch.nn.Dropout(p=dropouts[i-1]))
+
+        self.out = nn.Linear(in_features=layers[-1], out_features=1)
 
         for m in self.modules():
             if isinstance(m, nn.Embedding):
                 nn.init.normal_(m.weight)
-            elif isinstance(m, nn.Linear):
-                nn.init.uniform_(m.weight)
 
     def forward(self, users, items):
 
         user_emb = self.embeddings_user(users)
         item_emb = self.embeddings_item(items)
-        prod = user_emb*item_emb
-        preds = torch.sigmoid(self.out(prod))
+        emb_vector = torch.cat([user_emb,item_emb], dim=1)
+        emb_vector = self.mlp(emb_vector)
+        preds = torch.sigmoid(self.out(emb_vector))
 
         return preds
-
-
-def train(model, criterion, optimizer, scheduler, epoch, batch_size,
-    use_cuda, train_ratings, negatives, n_items, n_neg):
-    model.train()
-    train_dataset = get_train_instances(train_ratings,
-        negatives,
-        n_items,
-        n_neg)
-    train_loader = DataLoader(dataset=train_dataset,
-        batch_size=batch_size,
-        num_workers=4,
-        shuffle=True)
-    train_steps = (len(train_loader.dataset) // train_loader.batch_size) + 1
-    running_loss=0
-    for data in train_loader:
-        users = data[:,0]
-        items = data[:,1]
-        labels = data[:,2].float()
-        if use_cuda:
-            users, items, labels = users.cuda(), items.cuda(), labels.cuda()
-        optimizer.zero_grad()
-        preds =  model(users, items)
-        if scheduler:
-            scheduler.step()
-        loss = criterion(preds.squeeze(1), labels)
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item()
-    return running_loss/train_steps
-
-
-def evaluate(model, test_loader, use_cuda, topk):
-    model.eval()
-    scores=[]
-    with torch.no_grad():
-        for data in test_loader:
-            users = data[:,0]
-            items = data[:,1]
-            labels = data[:,2].float()
-            if use_cuda:
-                users, items, labels = users.cuda(), items.cuda(), labels.cuda()
-            preds = model(users, items)
-            items_cpu = items.cpu().numpy()
-            preds_cpu = preds.squeeze(1).detach().cpu().numpy()
-            litems=np.split(items_cpu, test_loader.batch_size//100)
-            lpreds=np.split(preds_cpu, test_loader.batch_size//100)
-            scores += [get_scores(it,pr,topk) for it,pr in zip(litems,lpreds)]
-    hits = [s[0] for s in scores]
-    ndcgs = [s[1] for s in scores]
-    return (np.array(hits).mean(),np.array(ndcgs).mean())
-
-
-def checkpoint(model, modelpath):
-    torch.save(model.state_dict(), modelpath)
 
 
 if __name__ == '__main__':
@@ -144,7 +107,12 @@ if __name__ == '__main__':
     dataname = args.dataname
     train_matrix = args.train_matrix
     modeldir = args.modeldir
-    n_emb = args.n_emb
+    layers = eval(args.layers)
+    ll = str(layers[-1]) #last layer
+    dropouts = eval(args.dropouts)
+    dp = "wdp" if dropouts[0]!=0 else "wodp"
+    l2reg = args.l2reg
+    n_emb = int(layers[0]/2)
     batch_size = args.batch_size
     epochs = args.epochs
     learner = args.learner
@@ -156,11 +124,13 @@ if __name__ == '__main__':
     topk = args.topk
     n_neg = args.n_neg
 
-
-    modelfname = "GMF" + \
+    modelfname = "MLP" + \
         "_".join(["_bs", str(batch_size)]) + \
+        "_".join(["_reg", str(l2reg).replace(".", "")]) + \
         "_".join(["_lr", str(lr).replace(".", "")]) + \
         "_".join(["_n_emb", str(n_emb)]) + \
+        "_".join(["_ll", ll]) + \
+        "_".join(["_dp", dp]) + \
         "_".join(["_lrs", lrs]) + \
         ".pt"
     modelpath = os.path.join(modeldir, modelfname)
@@ -176,16 +146,16 @@ if __name__ == '__main__':
         shuffle=False
         )
 
-    model = GMF(n_users, n_items, n_emb=n_emb)
+    model = MLP(n_users, n_items, layers, dropouts)
 
     if learner.lower() == "adagrad":
-        optimizer = torch.optim.Adagrad(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=lr, weight_decay=l2reg)
     elif learner.lower() == "rmsprop":
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=l2reg)
     elif learner.lower() == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=l2reg)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
 
     criterion = nn.MSELoss()
 
@@ -221,7 +191,7 @@ if __name__ == '__main__':
 
     print("End. Best Iteration {}: HR = {:.4f}, NDCG = {:.4f}. ".format(best_iter, best_hr, best_ndcg))
     if save_model:
-        print("The best GMF model is saved to {}".format(modelpath))
+        print("The best MLP model is saved to {}".format(modelpath))
 
     if save_model:
         if not os.path.isfile(resultsdfpath):
