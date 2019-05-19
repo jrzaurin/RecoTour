@@ -1,7 +1,3 @@
-"""
-@author: Javier Rodriguez (jrzaurin@gmail.com)
-"""
-
 import numpy as np
 import pandas as pd
 import os
@@ -156,13 +152,14 @@ if __name__ == '__main__':
     topk = args.topk
     n_neg = args.n_neg
 
-
     modelfname = "GMF" + \
         "_".join(["_bs", str(batch_size)]) + \
         "_".join(["_lr", str(lr).replace(".", "")]) + \
         "_".join(["_n_emb", str(n_emb)]) + \
+        "_".join(["_lrnr", learner]) + \
         "_".join(["_lrs", lrs]) + \
         ".pt"
+    if not os.path.exists(modeldir): os.makedirs(modeldir)
     modelpath = os.path.join(modeldir, modelfname)
     resultsdfpath = os.path.join(modeldir, 'results_df.p')
 
@@ -181,16 +178,16 @@ if __name__ == '__main__':
     if learner.lower() == "adagrad":
         optimizer = torch.optim.Adagrad(model.parameters(), lr=lr)
     elif learner.lower() == "rmsprop":
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, momentum=0.9)
     elif learner.lower() == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, nesterov=True)
 
     criterion = nn.MSELoss()
 
     training_steps = ((len(train_ratings)+len(train_ratings)*n_neg)//batch_size)+1
-    step_size = training_steps*2
+    step_size = training_steps*3 # one cycle every 6 epochs
     cycle_momentum=True
     if learner.lower() == "adagrad" or learner.lower()=="adam":
         cycle_momentum=False
@@ -215,7 +212,8 @@ if __name__ == '__main__':
             print("Epoch: {} {:.2f}s, LOSS = {:.4f}, HR = {:.4f}, NDCG = {:.4f}, validated in {:.2f}s".
                 format(epoch, t2-t1, loss, hr, ndcg, time()-t2))
             if hr > best_hr:
-                best_hr, best_ndcg, best_iter, train_time = hr, ndcg, epoch, t2-t1
+                iter_loss, best_hr, best_ndcg, best_iter, train_time = \
+                    loss, hr, ndcg, epoch, t2-t1
                 if save_model:
                     checkpoint(model, modelpath)
 
@@ -224,16 +222,15 @@ if __name__ == '__main__':
         print("The best GMF model is saved to {}".format(modelpath))
 
     if save_model:
+        cols = ["modelname", "iter_loss","best_hr", "best_ndcg", "best_iter","train_time"]
+        vals = [modelfname, iter_loss, best_hr, best_ndcg, best_iter, train_time]
         if not os.path.isfile(resultsdfpath):
-            results_df = pd.DataFrame(columns = ["modelname", "best_hr", "best_ndcg", "best_iter",
-                "train_time"])
-            experiment_df = pd.DataFrame([[modelfname, best_hr, best_ndcg, best_iter, train_time]],
-                columns = ["modelname", "best_hr", "best_ndcg", "best_iter","train_time"])
+            results_df = pd.DataFrame(columns=cols)
+            experiment_df = pd.DataFrame(data=[vals], columns=cols)
             results_df = results_df.append(experiment_df, ignore_index=True)
             results_df.to_pickle(resultsdfpath)
         else:
             results_df = pd.read_pickle(resultsdfpath)
-            experiment_df = pd.DataFrame([[modelfname, best_hr, best_ndcg, best_iter, train_time]],
-                columns = ["modelname", "best_hr", "best_ndcg", "best_iter","train_time"])
+            experiment_df = pd.DataFrame(data=[vals], columns=cols)
             results_df = results_df.append(experiment_df, ignore_index=True)
             results_df.to_pickle(resultsdfpath)

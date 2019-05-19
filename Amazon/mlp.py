@@ -1,7 +1,3 @@
-"""
-@author: Javier Rodriguez (jrzaurin@gmail.com)
-"""
-
 import numpy as np
 import pandas as pd
 import os
@@ -131,6 +127,7 @@ if __name__ == '__main__':
         "_".join(["_n_emb", str(n_emb)]) + \
         "_".join(["_ll", ll]) + \
         "_".join(["_dp", dp]) + \
+        "_".join(["_lrnr", learner]) + \
         "_".join(["_lrs", lrs]) + \
         ".pt"
     modelpath = os.path.join(modeldir, modelfname)
@@ -151,16 +148,18 @@ if __name__ == '__main__':
     if learner.lower() == "adagrad":
         optimizer = torch.optim.Adagrad(model.parameters(), lr=lr, weight_decay=l2reg)
     elif learner.lower() == "rmsprop":
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=l2reg)
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=l2reg,
+            momentum=0.9)
     elif learner.lower() == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=l2reg)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg,
+            momentum=0.9, nesterov=True)
 
     criterion = nn.MSELoss()
 
     training_steps = ((len(train_ratings)+len(train_ratings)*n_neg)//batch_size)+1
-    step_size = training_steps*2
+    step_size = training_steps*3 #one cycle every 6 epochs
     cycle_momentum=True
     if learner.lower() == "adagrad" or learner.lower()=="adam":
         cycle_momentum=False
@@ -194,16 +193,15 @@ if __name__ == '__main__':
         print("The best MLP model is saved to {}".format(modelpath))
 
     if save_model:
+        cols = ["modelname", "iter_loss","best_hr", "best_ndcg", "best_iter","train_time"]
+        vals = [modelfname, iter_loss, best_hr, best_ndcg, best_iter, train_time]
         if not os.path.isfile(resultsdfpath):
-            results_df = pd.DataFrame(columns = ["modelname", "best_hr", "best_ndcg", "best_iter",
-                "train_time"])
-            experiment_df = pd.DataFrame([[modelfname, best_hr, best_ndcg, best_iter, train_time]],
-                columns = ["modelname", "best_hr", "best_ndcg", "best_iter","train_time"])
+            results_df = pd.DataFrame(columns=cols)
+            experiment_df = pd.DataFrame(data=[vals], columns=cols)
             results_df = results_df.append(experiment_df, ignore_index=True)
             results_df.to_pickle(resultsdfpath)
         else:
             results_df = pd.read_pickle(resultsdfpath)
-            experiment_df = pd.DataFrame([[modelfname, best_hr, best_ndcg, best_iter, train_time]],
-                columns = ["modelname", "best_hr", "best_ndcg", "best_iter","train_time"])
+            experiment_df = pd.DataFrame(data=[vals], columns=cols)
             results_df = results_df.append(experiment_df, ignore_index=True)
             results_df.to_pickle(resultsdfpath)

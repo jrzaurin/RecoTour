@@ -1,25 +1,22 @@
-time python gmf.py --batch_size 512 --lr 0.01 --n_emb 8 --epochs 10 --save 0
-time python gmf.py --batch_size 512 --lr 0.01 --n_emb 16 --epochs 10 --save 0
-time python gmf.py --batch_size 512 --lr 0.01 --n_emb 32 --epochs 10 --save 0
-time python gmf.py --batch_size 512 --lr 0.01 --n_emb 64 --epochs 10 --save 0
+# time python gmf.py --batch_size 512 --lr 0.01 --n_emb 8 --epochs 30
+# time python gmf.py --batch_size 1024 --lr 0.01 --n_emb 8 --epochs 30
 
-# python gmf.py --batch_size 1024 --lr 0.01 --n_emb 32 --epochs 30
-# python gmf.py --batch_size 1024 --lr 0.01 --n_emb 64 --epochs 30
+# time python gmf.py --batch_size 512 --lr 0.01 --n_emb 16 --epochs 30 --validate_every 2
 
-# python gmf.py --batch_size 512 --lr 0.003 --n_emb 32 --epochs 30
-# python gmf.py --batch_size 512 --lr 0.003 --n_emb 64 --epochs 30
-# python gmf.py --batch_size 1024 --lr 0.003 --n_emb 32 --epochs 30
-# python gmf.py --batch_size 1024 --lr 0.003 --n_emb 64 --epochs 30
+# time python gmf.py --batch_size 512 --lr 0.01 --lr_scheduler --learner "SGD" --n_emb 8 --epochs 30
+# time python gmf.py --batch_size 512 --lr 0.01 --lr_scheduler --learner "RMSprop" --n_emb 8 --epochs 30
+# time python gmf.py --batch_size 512 --lr 0.01 --lr_scheduler --n_emb 8 --epochs 30
 
+time python gmf.py --batch_size 512 --lr 0.001 --n_emb 64 --epochs 30
 
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[32, 16, 8]" --epochs 30
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[32, 16, 8]" --dropouts "[0.25, 0.25]" --epochs 40
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[64, 32, 16]" --epochs 30
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[64, 32, 16]" --dropouts "[0.25, 0.25]" --epochs 40
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[128, 64, 32]" --epochs 30
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[128, 64, 32]" --dropouts "[0.25, 0.25]" --epochs 40
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[256, 128, 64]" --epochs 30
-# python mlp.py --batch_size 256 --lr 0.01 --layers "[256, 128, 64]" --dropouts "[0.25, 0.25]" --epochs 40
+time python mlp.py --batch_size 512 --lr 0.01 --layers "[32, 16, 8]" --epochs 30
+time python mlp.py --batch_size 512 --lr 0.01 --layers "[64, 32, 16]" --epochs 30
+time python mlp.py --batch_size 512 --lr 0.01 --layers "[128, 64, 32]" --epochs 30
+time python mlp.py --batch_size 512 --lr 0.01 --layers "[256, 128, 64]" --epochs 30
+
+# python mlp.py --batch_size 512 --lr 0.01 --layers "[64, 32, 16]" --dropouts "[0.25, 0.25]" --epochs 40
+# python mlp.py --batch_size 512 --lr 0.01 --layers "[128, 64, 32]" --dropouts "[0.25, 0.25]" --epochs 40
+# python mlp.py --batch_size 512 --lr 0.01 --layers "[256, 128, 64]" --dropouts "[0.25, 0.25]" --epochs 40
 
 # python neumf.py --batch_size 256 --lr 0.01 --n_emb 64 --layers "[256, 128, 64]" --dropouts "[0.,0.]" --epochs 30
 # python neumf.py --batch_size 256 --lr 0.001 --n_emb 64 --layers "[256, 128, 64]" --dropouts "[0.,0.]" \
