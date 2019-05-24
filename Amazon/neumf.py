@@ -96,15 +96,15 @@ class NeuMF(nn.Module):
         self.mf_embeddings_user = nn.Embedding(n_user, n_emb)
         self.mf_embeddings_item = nn.Embedding(n_item, n_emb)
 
-        self.mlp_embeddings_user = nn.Embedding(n_user, int(layers[0]/2))
-        self.mlp_embeddings_item = nn.Embedding(n_item, int(layers[0]/2))
+        self.mlp_embeddings_user = nn.Embedding(n_user, layers[0]//2)
+        self.mlp_embeddings_item = nn.Embedding(n_item, layers[0]//2)
         self.mlp = nn.Sequential()
         for i in range(1,self.n_layers):
             self.mlp.add_module("linear%d" %i, nn.Linear(layers[i-1],layers[i]))
             self.mlp.add_module("relu%d" %i, torch.nn.ReLU())
             self.mlp.add_module("dropout%d" %i , torch.nn.Dropout(p=dropouts[i-1]))
 
-        self.out = nn.Linear(in_features=n_emb*2, out_features=1)
+        self.out = nn.Linear(in_features=n_emb+layers[-1], out_features=1)
 
         for m in self.modules():
             if isinstance(m, nn.Embedding):
@@ -170,6 +170,7 @@ if __name__ == '__main__':
     lr = args.lr
     learner = args.learner
     lr_scheduler = args.lr_scheduler
+    lrs = "wlrs" if lr_scheduler else "wolrs"
 
     n_emb = args.n_emb
 
@@ -193,6 +194,7 @@ if __name__ == '__main__':
         "_" + with_pretrained + \
         "_" + is_frozen + \
         "_" + learner + \
+        "_".join(["_lrs", lrs]) + \
         ".pt"
     modelpath = os.path.join(modeldir, modelfname)
     resultsdfpath = os.path.join(modeldir, 'results_df.p')

@@ -184,7 +184,8 @@ if __name__ == '__main__':
             print("Epoch: {} {:.2f}s, LOSS = {:.4f}, HR = {:.4f}, NDCG = {:.4f}, validated in {:.2f}s".
                 format(epoch, t2-t1, loss, hr, ndcg, time()-t2))
             if hr > best_hr:
-                best_hr, best_ndcg, best_iter, train_time = hr, ndcg, epoch, t2-t1
+                iter_loss, best_hr, best_ndcg, best_iter, train_time = \
+                    loss, hr, ndcg, epoch, t2-t1
                 if save_model:
                     checkpoint(model, modelpath)
 
