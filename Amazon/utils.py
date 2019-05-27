@@ -39,7 +39,15 @@ def get_ndcg(ranklist, gtitem):
 
 
 def get_scores(items, preds, topk):
+
     gtitem = items[0]
+
+    # the following 3 lines of code ensure that the fact that the 1st item is
+    # gtitem does not affect the final rank
+    randidx = np.arange(100)
+    np.random.shuffle(randidx)
+    items, preds = items[randidx], preds[randidx]
+
     map_item_score = dict( zip(items, preds) )
     ranklist = heapq.nlargest(topk, map_item_score, key=map_item_score.get)
     hr = get_hitratio(ranklist, gtitem)

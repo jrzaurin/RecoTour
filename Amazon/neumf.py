@@ -44,6 +44,8 @@ def parse_args():
         help="Specify an optimizer: adagrad, adam, rmsprop, sgd")
     parser.add_argument("--lr_scheduler", action="store_true",
         help="boolean to set the use of CyclicLR during training")
+    parser.add_argument("--loss_criterion", type=str, default="mse",
+        help="Specify the criterion: mse or bce")
 
     # GMF set up
     parser.add_argument("--n_emb", type=int, default=8,
@@ -241,7 +243,10 @@ if __name__ == '__main__':
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg,
             momentum=0.9, nesterov=True)
 
-    criterion = nn.MSELoss()
+    if loss_criterion.lower() == "mse":
+        criterion = nn.MSELoss()
+    else:
+        criterion = nn.BCELoss()
 
     # model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     # trainable_params = sum([np.prod(p.size()) for p in model_parameters])

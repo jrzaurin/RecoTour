@@ -38,6 +38,8 @@ def parse_args():
         help="Specify an optimizer: adagrad, adam, rmsprop, sgd")
     parser.add_argument("--lr_scheduler", action="store_true",
         help="boolean to set the use of CyclicLR during training")
+    parser.add_argument("--loss_criterion", type=str, default="mse",
+        help="Specify the criterion: mse or bce")
     parser.add_argument("--validate_every", type=int, default=1,
         help="validate every n epochs")
     parser.add_argument("--save_model", type=int, default=1)
@@ -147,6 +149,7 @@ if __name__ == '__main__':
     lr = args.lr
     lr_scheduler = args.lr_scheduler
     lrs = "wlrs" if lr_scheduler else "wolrs"
+    loss_criterion = args.loss_criterion
     validate_every = args.validate_every
     save_model = args.save_model
     topk = args.topk
@@ -169,7 +172,7 @@ if __name__ == '__main__':
     n_users, n_items = dataset['n_users'].item(), dataset['n_items'].item()
 
     test_loader = DataLoader(dataset=test_ratings,
-        batch_size=1000,
+        batch_size=10000,
         shuffle=False
         )
 
@@ -184,7 +187,10 @@ if __name__ == '__main__':
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, nesterov=True)
 
-    criterion = nn.MSELoss()
+    if loss_criterion.lower() == "mse":
+        criterion = nn.MSELoss()
+    else:
+        criterion = nn.BCELoss()
 
     training_steps = ((len(train_ratings)+len(train_ratings)*n_neg)//batch_size)+1
     step_size = training_steps*3 # one cycle every 6 epochs
