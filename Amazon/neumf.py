@@ -248,7 +248,7 @@ if __name__ == '__main__':
     # print(trainable_params)
 
     training_steps = ((len(train_ratings)+len(train_ratings)*n_neg)//batch_size)+1
-    step_size = training_steps*3 #one cycle every 6 epochs
+    step_size = training_steps*3
     cycle_momentum=True
     if learner.lower() == "adagrad" or learner.lower()=="adam":
         cycle_momentum=False
@@ -269,7 +269,8 @@ if __name__ == '__main__':
             print("Epoch: {} {:.2f}s, LOSS = {:.4f}, HR = {:.4f}, NDCG = {:.4f}, validated in {:.2f}s".
                 format(epoch, t2-t1, loss, hr, ndcg, time()-t2))
             if hr > best_hr:
-                best_hr, best_ndcg, best_iter, train_time = hr, ndcg, epoch, t2-t1
+                iter_loss, best_hr, best_ndcg, best_iter, train_time = \
+                    loss, hr, ndcg, epoch, t2-t1
                 if save_model:
                     checkpoint(model, modelpath)
 

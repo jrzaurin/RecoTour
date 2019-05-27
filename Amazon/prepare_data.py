@@ -66,11 +66,11 @@ def neuralcf_split(df, data_path):
 		np.random.seed=rseed
 		return np.random.choice(np.setdiff1d(all_items, item_list), n)
 
-	print("sampling not rated items for negative feedback...")
+	print("sampling not rated items...")
 	start = time()
 	non_rated_items = Parallel(n_jobs=4)(delayed(sample_not_rated)(ri) for ri in rated_items)
 	end = time() - start
-	print("sampling for negative feedback took {} min".format(round(end/60,2)))
+	print("sampling took {} min".format(round(end/60,2)))
 
 	negative = pd.DataFrame({'negative':non_rated_items})
 	negative[['item_n'+str(i) for i in range(99)]] =\

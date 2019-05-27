@@ -70,7 +70,7 @@ class GMF(nn.Module):
         user_emb = self.embeddings_user(users)
         item_emb = self.embeddings_item(items)
         prod = user_emb*item_emb
-        preds = torch.sigmoid(self.out(prod))
+        preds = self.out(prod)
 
         return preds
 
