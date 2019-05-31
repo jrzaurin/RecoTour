@@ -1,7 +1,3 @@
-"""
-@author: Javier Rodriguez (jrzaurin@gmail.com)
-"""
-
 import numpy as np
 import pandas as pd
 import os
