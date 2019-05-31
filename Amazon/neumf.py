@@ -17,6 +17,7 @@ from mlp import MLP
 
 
 def parse_args():
+
     parser = argparse.ArgumentParser()
 
     # dirnames
