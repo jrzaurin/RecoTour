@@ -44,8 +44,6 @@ def parse_args():
         help="Specify an optimizer: adagrad, adam, rmsprop, sgd")
     parser.add_argument("--lr_scheduler", action="store_true",
         help="use CyclicLR during training")
-    parser.add_argument("--loss_criterion", type=str, default="mse",
-        help="Specify the criterion: mse or bce")
     parser.add_argument("--validate_every", type=int, default=1,
         help="validate every n epochs")
     parser.add_argument("--save_model", type=int, default=1)
@@ -158,10 +156,7 @@ if __name__ == '__main__':
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=l2reg,
             momentum=0.9, nesterov=True)
 
-    if loss_criterion.lower() == "mse":
-        criterion = nn.MSELoss()
-    else:
-        criterion = nn.BCELoss()
+    criterion = nn.BCELoss()
 
     training_steps = ((len(train_ratings)+len(train_ratings)*n_neg)//batch_size)+1
     step_size = training_steps*3 #one cycle every 6 epochs

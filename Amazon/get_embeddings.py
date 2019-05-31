@@ -23,7 +23,7 @@ def getDF(path):
 	return pd.DataFrame.from_dict(df, orient='index')
 
 DATA_PATH = Path("../datasets/Amazon/")
-MODEL_DIR = "models/store"
+MODEL_DIR = "models"
 
 asin2id_map = pickle.load(open(DATA_PATH/'item_mappings.p', 'rb'))
 id2asin_map = {k:v for v,k in asin2id_map.items()}
@@ -42,6 +42,8 @@ best_gmf = (df_results[df_results.modelname.str.contains('GMF')]
 n_emb_i = int(np.where([s == 'emb' for s in best_gmf.split("_")])[0])+1
 n_emb = int(best_gmf.split("_")[n_emb_i])
 
+
+best_gmf = "GMF_bs_1024_lr_001_n_emb_16_lrnr_adam_lrs_wolrs_loss_BCE.pt"
 dataset = np.load(DATA_PATH/'neuralcf_split.npz')
 n_users, n_items = dataset['n_users'].item(), dataset['n_items'].item()
 
