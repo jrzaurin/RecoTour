@@ -9,6 +9,7 @@ from pathlib import Path
 from mlp import MLP
 from gmf import GMF
 
+
 def parse(path):
 	g = gzip.open(path, 'rb')
 	for l in g:
