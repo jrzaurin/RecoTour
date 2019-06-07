@@ -2,7 +2,7 @@
 
 This repo intends to be a tour through some recommendation algorithms in
 python using various dataset. A companion Medium post can be found
-[here](https://medium.com/datadriveninvestor/recotour-a-tour-through-recommendation-algorithms-in-python-52d780628ab9)
+[here](https://medium.com/datadriveninvestor/recotour-a-tour-through-recommendation-algorithms-in-python-52d780628ab9).
 
 At the moment the datasets included are:
 
