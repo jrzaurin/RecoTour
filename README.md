@@ -17,14 +17,9 @@ the corresponding notebooks are, in general, more detailed.
 
 **The core of the repo are the notebooks** in each directory. They intend to
 be self-contained and in consequence, there is some of code repetition. The
-code is, of course, "notebook-oriented". In the case of the `Ponpare` example
-I have included a more modular (nicer looking) version of a possible final
-solution (described in `Chapter16_final_solution_Recommendations.ipynb`) in
-the directory `final_recommendations`.
-
-The notebooks have plenty of explanations and references to relevant papers or
-packages. My intention was to focus on the code, but you will also find some
-math.
+code is, of course, "notebook-oriented". The notebooks have plenty of
+explanations and references to relevant papers or packages. My intention was
+to focus on the code, but you will also find some math.
 
 All the code in the notebooks has run on a **c5.4xlarge** instance or a
 **p2.xlarge** instance when running deep learning algorithms.
@@ -43,19 +38,19 @@ This is what you will find in the notebooks:
 8. Field Aware Factorization Machines recommendations using `xlearn`
 9. Deep Learning based recommendations (Wide and Deep) using `pytorch`
 
-I have included a notebook with what it could be a good solution for this
-problem in "the real word".
+I have included a more modular (nicer looking) version of a possible final
+solution (described in `Chapter16_final_solution_Recommendations.ipynb`) in
+the directory `final_recommendations`.
 
 In addition, I have included an illustration of how to use other evaluation
 metrics apart from the one shown in the notebooks ( the mean average precision
 or MAP) such as the Normalized Discounted Cumulative Gain
 ([NDCG](https://en.wikipedia.org/wiki/Discounted_cumulative_gain)). This can
-be found in  `using_ncdg.py` in the directory `py_scripts`.
+be found in `using_ncdg.py` in the directory `py_scripts`.
 
-
-## Amazon
+## Amazon
 
 1. [Neural Collaborative Filtering](https://www.comp.nus.edu.sg/~xiangnan/papers/ncf.pdf)
 
-
-I hope the code here is useful to someone. If you have any idea on how to improve the content of the repo, or you want to contribute, let me know.
+I hope the code here is useful to someone. If you have any idea on how to
+improve the content of the repo, or you want to contribute, let me know.
