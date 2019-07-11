@@ -22,10 +22,8 @@ def parse_args():
         help="data directory.")
     parser.add_argument("--modeldir", type=str, default="../datasets/Amazon/models",
         help="models directory")
-    parser.add_argument("--dataname", type=str, default="neuralcf_split.npz",
+    parser.add_argument("--dataname", type=str, default="standard_split.npz",
         help="npz file with dataset")
-    parser.add_argument("--train_matrix", type=str, default="neuralcf_train_sparse.npz",
-        help="train matrix for faster iteration")
     parser.add_argument("--epochs", type=int, default=5,
         help="number of epochs.")
     parser.add_argument("--batch_size", type=int, default=256,
@@ -98,14 +96,14 @@ def train(model, train_loader, criterion, optimizer, epoch):
     return running_loss/train_steps
 
 
-def valid(model, valid_loader, criterion):
+def valid(model, data_loader, criterion, mode='valid'):
     model.eval()
-    valid_steps = (len(valid_loader.dataset) // valid_loader.batch_size) + 1
+    steps = (len(data_loader.dataset) // data_loader.batch_size) + 1
     running_loss=0
     with torch.no_grad():
-        with trange(valid_steps) as t:
-            for i, data in zip(t, valid_loader):
-                t.set_description('valid')
+        with trange(steps) as t:
+            for i, data in zip(t, data_loader):
+                t.set_description(mode)
                 users = data[:,0]
                 items = data[:,1]
                 labels = data[:,2].float()
@@ -116,31 +114,7 @@ def valid(model, valid_loader, criterion):
                 running_loss += loss.item()
                 avg_loss = running_loss/(i+1)
                 t.set_postfix(loss=np.sqrt(avg_loss))
-    return running_loss/valid_steps
-
-
-def test(model, test_loader, topk):
-    model.eval()
-    test_steps = (len(test_loader.dataset) // test_loader.batch_size) + 1
-    scores=[]
-    with torch.no_grad():
-        with trange(test_steps) as t:
-            for i, data in zip(t, test_loader):
-                t.set_description('test')
-                users = data[:,0]
-                items = data[:,1]
-                labels = data[:,2].float()
-                if use_cuda:
-                    users, items, labels = users.cuda(), items.cuda(), labels.cuda()
-                preds = model(users, items)
-                items_cpu = items.cpu().numpy()
-                preds_cpu = preds.squeeze(1).detach().cpu().numpy()
-                litems=np.split(items_cpu, test_loader.batch_size//100)
-                lpreds=np.split(preds_cpu, test_loader.batch_size//100)
-                scores += [get_scores(it,pr,topk) for it,pr in zip(litems,lpreds)]
-    hits = [s[0] for s in scores]
-    ndcgs = [s[1] for s in scores]
-    return (np.array(hits).mean(),np.array(ndcgs).mean())
+    return running_loss/steps
 
 
 def checkpoint(model, modelpath):
@@ -153,7 +127,6 @@ if __name__ == '__main__':
 
     datadir = args.datadir
     dataname = args.dataname
-    train_matrix = args.train_matrix
     modeldir = args.modeldir
     n_emb = args.n_emb
     batch_size = args.batch_size
@@ -162,8 +135,6 @@ if __name__ == '__main__':
     lr = args.lr
     validate_every = args.validate_every
     save_model = args.save_model
-    topk = args.topk
-    n_neg = args.n_neg
 
     modelfname = "GMF_wo_neg" + \
         "_".join(["_bs", str(batch_size)]) + \
@@ -175,12 +146,13 @@ if __name__ == '__main__':
     modelpath = os.path.join(modeldir, modelfname)
     resultsdfpath = os.path.join(modeldir, 'results_wo_negatove_df.p')
 
+    # I am going to perform a simple train/valid/test exercise, predicting
+    # directly the ratings. I will leave it to you to adapt the datasets so
+    # that we could get some ranking metrics
     dataset = np.load(os.path.join(datadir, dataname))
-    df_train = pd.DataFrame(dataset['train'], columns=['user', 'item', 'rating'])
-    df_train['rating'] = df_train.rating.apply(lambda x: 3 if x==5 else 2 if (x==4 or x==3) else 1)
-    train_dataset, valid_dataset = train_test_split(df_train.values, test_size=0.2, stratify=df_train['rating'])
-    test_ratings, negatives = dataset['test_negative'], dataset['negatives']
-    n_users, n_items = dataset['n_users'].item(), dataset['n_items'].item()
+    train_dataset, test_dataset = dataset['train'][:, [0,1,3]], dataset['test'][:, [0,1,3]]
+    train_dataset, valid_dataset = train_test_split(train_dataset, test_size=0.2, stratify=train_dataset[:,2])
+    n_users, n_items = dataset['n_users'], dataset['n_items']
 
     train_loader = DataLoader(dataset=train_dataset,
         batch_size=batch_size,
@@ -190,8 +162,8 @@ if __name__ == '__main__':
         batch_size=batch_size,
         num_workers=4,
         shuffle=True)
-    test_loader = DataLoader(dataset=test_ratings,
-        batch_size=1000,
+    test_loader = DataLoader(dataset=test_dataset,
+        batch_size=batch_size,
         shuffle=False
         )
 
@@ -212,35 +184,10 @@ if __name__ == '__main__':
     if use_cuda:
         model = model.cuda()
 
-    best_hr, best_ndcgm, best_iter=0,0,0
+    # There are better ways of structuring the code, but since I already had
+    # it from the other experiments I will run it like this:
     for epoch in range(1,epochs+1):
         tr_loss  = train(model, train_loader, criterion, optimizer, epoch)
-        val_loss = valid(model, valid_loader, criterion)
-        if epoch % validate_every == 0:
-            (hr, ndcg) = test(model, test_loader, topk)
-            print("epoch: {} HR = {:.4f}, NDCG = {:.4f}".format(epoch, hr, ndcg))
-            if hr > best_hr:
-                iter_tr_loss, iter_val_loss, best_hr, best_ndcg, best_iter = \
-                    tr_loss, val_loss, hr, ndcg, epoch
-                if save_model:
-                    checkpoint(model, modelpath)
-
-    print("End. Best Iteration {}: HR = {:.4f}, NDCG = {:.4f}. ".format(best_iter, best_hr, best_ndcg))
-    if save_model:
-        print("The best GMF model wihtout negative feedback is saved to {}".format(modelpath))
-
-    if save_model:
-        cols = ["modelname", "iter_tr_loss", "iter_val_loss", "best_hr",
-            "best_ndcg", "best_iter"]
-        vals = [modelfname, iter_tr_loss, iter_val_loss, best_hr, best_ndcg,
-            best_iter]
-        if not os.path.isfile(resultsdfpath):
-            results_df = pd.DataFrame(columns=cols)
-            experiment_df = pd.DataFrame(data=[vals], columns=cols)
-            results_df = results_df.append(experiment_df, ignore_index=True)
-            results_df.to_pickle(resultsdfpath)
-        else:
-            results_df = pd.read_pickle(resultsdfpath)
-            experiment_df = pd.DataFrame(data=[vals], columns=cols)
-            results_df = results_df.append(experiment_df, ignore_index=True)
-            results_df.to_pickle(resultsdfpath)
+        val_loss = valid(model, valid_loader, criterion, mode='valid')
+    test_loss = valid(model, test_loader, criterion, mode='test')
+    print("test loss: {}".format(np.sqrt(test_loss)))
