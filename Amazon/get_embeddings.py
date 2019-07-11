@@ -35,6 +35,19 @@ df_movies_meta_data = df_movies_meta_data[keep_cols]
 df_movies_meta_data = df_movies_meta_data[~df_movies_meta_data.title.isna()]
 asin2title_map = dict(df_movies_meta_data.values)
 
+print("number of items with missing title in the core dataset: {}".format(
+	np.setdiff1d(list(id2asin_map.values()), list(asin2title_map.keys())).shape[0]))
+print("number of items with non missing titles in the core dataset: {}".format(
+	len(id2asin_map) \
+	- np.setdiff1d(list(id2asin_map.values()), list(asin2title_map.keys())).shape[0]))
+
+id2title_map = {}
+for k,v in id2asin_map.items():
+	try:
+		id2title_map[k] = asin2title_map[v]
+	except:
+		continue
+
 df_results = pd.read_pickle(DATA_PATH/MODEL_DIR/'results_df.p')
 best_gmf = (df_results[df_results.modelname.str.contains('GMF')]
 	.sort_values('best_hr', ascending=False)
@@ -43,13 +56,8 @@ best_gmf = (df_results[df_results.modelname.str.contains('GMF')]
 n_emb_i = int(np.where([s == 'emb' for s in best_gmf.split("_")])[0])+1
 n_emb = int(best_gmf.split("_")[n_emb_i])
 
-
-best_gmf = "GMF_bs_1024_lr_001_n_emb_16_lrnr_adam_lrs_wolrs_loss_BCE.pt"
 dataset = np.load(DATA_PATH/'neuralcf_split.npz')
 n_users, n_items = dataset['n_users'].item(), dataset['n_items'].item()
-
-# model = MLP(n_users, n_items, [128, 64, 32], [0,0])
-# model.load_state_dict(torch.load(DATA_PATH/MODEL_DIR/best_gmf))
 
 gmf_model = GMF(n_users, n_items, n_emb)
 gmf_model.load_state_dict(torch.load(DATA_PATH/MODEL_DIR/best_gmf))
@@ -58,4 +66,41 @@ item_embeddings = gmf_model.embeddings_item.weight.data.numpy()
 knn_model = NearestNeighbors(metric = 'cosine', algorithm = 'brute')
 knn_model.fit(item_embeddings)
 
-dist, nnidx = knn_model.kneighbors(item_embeddings[1234].reshape(1, -1), n_neighbors = 20)
+def get_movie_titles(input_id, n=20):
+	"""first movie will be the "query" movie and the remaining n-1 the similar
+	movies. Similar defined under the functioning of the algorithm, i.e.
+	leading to the same prediction"""
+	dist, nnidx = knn_model.kneighbors(
+		item_embeddings[input_id].reshape(1, -1),
+		n_neighbors = n)
+	titles = []
+	for idx in nnidx[0]:
+		try:
+			titles.append(id2title_map[idx])
+		except:
+			continue
+	return titles
+
+similar_movies = get_movie_titles(1234)
+# In [13]: similar_movies
+# Out[13]:
+# ['Ace Ventura: Pet Detective',
+#  'Gone in 60 Seconds',
+#  'Better Off Dead [VHS]',
+#  'Dinosaur [VHS]',
+#  'Coming to America [VHS]',
+#  'Rush Hour [VHS]',
+#  'Tommy Boy [VHS]',
+#  'Rush Hour 2 [VHS]',
+#  "Bill and Ted's Excellent Adventure [VHS]",
+#  'Evolution',
+#  'Con Air [VHS]',
+#  'Liar Liar [VHS]',
+#  'The Karate Kid',
+#  'Weird Science [VHS]',
+#  'The Fast and the Furious',
+#  'Jumanji [VHS]',
+#  'Open Season [UMD for PSP]',
+#  'Ace Ventura: When Nature Calls [VHS]',
+#  'Scary Movie',
+#  'Die Hard Trilogy']
