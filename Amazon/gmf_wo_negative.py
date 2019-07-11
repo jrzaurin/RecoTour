@@ -34,13 +34,6 @@ def parse_args():
         help="if lr_scheduler this will be max_lr")
     parser.add_argument("--learner", type=str, default="adam",
         help="Specify an optimizer: adagrad, adam, rmsprop, sgd")
-    parser.add_argument("--validate_every", type=int, default=1,
-        help="validate every n epochs")
-    parser.add_argument("--save_model", type=int, default=1)
-    parser.add_argument("--n_neg", type=int, default=4,
-        help="number of negative instances to consider per positive instance")
-    parser.add_argument("--topk", type=int, default=10,
-        help="number of items to retrieve for recommendation")
 
     return parser.parse_args()
 
@@ -133,18 +126,6 @@ if __name__ == '__main__':
     epochs = args.epochs
     learner = args.learner
     lr = args.lr
-    validate_every = args.validate_every
-    save_model = args.save_model
-
-    modelfname = "GMF_wo_neg" + \
-        "_".join(["_bs", str(batch_size)]) + \
-        "_".join(["_lr", str(lr).replace(".", "")]) + \
-        "_".join(["_n_emb", str(n_emb)]) + \
-        "_".join(["_lrnr", learner]) + \
-        ".pt"
-    if not os.path.exists(modeldir): os.makedirs(modeldir)
-    modelpath = os.path.join(modeldir, modelfname)
-    resultsdfpath = os.path.join(modeldir, 'results_wo_negatove_df.p')
 
     # I am going to perform a simple train/valid/test exercise, predicting
     # directly the ratings. I will leave it to you to adapt the datasets so
