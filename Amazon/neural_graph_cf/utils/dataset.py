@@ -51,7 +51,6 @@ class Data(object):
 
         self.Rtr = sp.dok_matrix((self.n_users, self.n_items), dtype=np.float32)
         self.Rte = sp.dok_matrix((self.n_users, self.n_items), dtype=np.float32)
-        self.Rtr_inv = sp.dok_matrix(np.ones((self.n_users, self.n_items)))
 
         self.train_items, self.test_set = {}, {}
         with open(train_file) as f_train:
@@ -64,7 +63,6 @@ class Data(object):
 
                     for i in train_items:
                         self.Rtr[uid, i] = 1.
-                        self.Rtr_inv[uid, i] = 0.
 
                     self.train_items[uid] = train_items
 
@@ -170,3 +168,39 @@ class Data(object):
         print('n_users=%d, n_items=%d' % (self.n_users, self.n_items))
         print('n_interactions=%d' % (self.n_train + self.n_test))
         print('n_train=%d, n_test=%d, sparsity=%.5f' % (self.n_train, self.n_test, (self.n_train + self.n_test)/(self.n_users * self.n_items)))
+
+
+def test_data_building_process(data_path, org_dataset, user_map_fname, item_map_fname,
+    generator, N=10):
+    """
+    Simple funcion to test we have built correctly the datasets
+    """
+
+    # Read the original dataset (no mapping)
+    df = pd.read_csv(data_path/org_dataset)
+    # Read the mappings
+    user_map = pd.read_csv(data_path/user_map_fname, sep=" ").set_index('orig_id').to_dict()['remap_id']
+    item_map = pd.read_csv(data_path/item_map_fname, sep=" ").set_index('orig_id').to_dict()['remap_id']
+    # pick N random users
+    random_users = np.random.choice(df.user.unique(), N, replace=False)
+    temp = df[df.user.isin(random_users)]
+
+    # for each user, make sure that all items in data_generator train and test
+    # sets are in  the original dataset. Note that since the Data class only
+    # loads two datasets (train/valid) or (train/test) there will be some items
+    # in the original dataset that will not be present in "all_items"
+    users_check = []
+    for u in random_users:
+        mapped_user_id = user_map[u]
+        # get training and test/valid items
+        train_items = data_generator.train_items[mapped_user_id]
+        test_items = data_generator.test_set[mapped_user_id]
+        all_items = train_items+test_items
+        # map them back to their original IDs
+        org_items_id1 = [k for k,v in item_map.items() if v in all_items]
+        # get their original IDs
+        org_items_id2 = temp[temp.user == u].item.tolist()
+        # check that every item in all_items is in org_items_id2
+        users_check.append(len(np.setdiff1d(org_items_id1, org_items_id2)) == 0)
+
+    return np.all(users_check)
