@@ -173,7 +173,7 @@ class Data(object):
 def test_data_building_process(data_path, org_dataset, user_map_fname, item_map_fname,
     generator, N=10):
     """
-    Simple funcion to test we have built correctly the datasets
+    Simple funcion to test we have built datasets correctly
     """
 
     # Read the original dataset (no mapping)
