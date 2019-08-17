@@ -62,6 +62,7 @@ if __name__ == '__main__':
 
 	DATA_PATH = Path(args.input_dir)
 	reviews = args.input_data
+	reviews_csv = 'reviews_Movies_and_TV_5.csv'
 
 	print("Reading amazon movies dataset...")
 	df = pd.read_json(DATA_PATH/reviews, lines=True)
@@ -69,6 +70,7 @@ if __name__ == '__main__':
 	new_colnames = ['user', 'item', 'timestamp', 'rating']
 	df = df[keep_cols]
 	df.columns = new_colnames
+	df.to_csv(DATA_PATH/reviews_csv, index=False)
 
 	df.sort_values(['user','timestamp'], ascending=[True,True], inplace=True)
 	df.reset_index(inplace=True, drop=True)
