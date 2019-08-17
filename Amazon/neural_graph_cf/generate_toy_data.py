@@ -26,7 +26,7 @@ if __name__ == '__main__':
     for u in range(n_users):
         # number of interactions between min-max
     	n_interactions = np.random.randint(min_interactions, max_interactions)
-        # random choice
+        # random choice n_interactions
     	items = np.random.choice(range(n_items), n_interactions, replace=False)
     	interactions.append((u, items))
 
