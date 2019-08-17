@@ -2,7 +2,6 @@
 This code is an adaptation of the original publication:
 Neural Graph Collaborative Filtering (NGCF) by Wang Xiang et al.
 '''
-
 import numpy as np
 import random as rd
 import scipy.sparse as sp
