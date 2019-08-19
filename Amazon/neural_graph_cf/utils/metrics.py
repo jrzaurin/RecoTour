@@ -8,7 +8,7 @@ def recall_at_k(r, k, n_inter):
     """recall @ k
     Parameters:
     ----------
-    r: Int
+    r: Iterable
         binary iterable (nonzero is relevant).
     k: Int
         number of recommendations to consider
@@ -26,7 +26,7 @@ def precision_at_k(r, k):
     """precision @ k
     Parameters:
     ----------
-    r: Int
+    r: Iterable
         binary iterable (nonzero is relevant).
     k: Int
         number of recommendations to consider
@@ -43,7 +43,7 @@ def dcg_at_k(r, k, method=1):
     """ discounted cumulative gain (dcg) @ k
     Parameters:
     ----------
-    r: Int or Float
+    r: Iterable
         Relevance is positive real values. If binary, nonzero is relevant.
     k: Int
         number of recommendations to consider
@@ -77,7 +77,7 @@ def hit_at_k(r, k):
     """hit ratio @ k
     Parameters:
     ----------
-    r: Int
+    r: Iterable
         binary iterable (nonzero is relevant).
     k: Int
         number of recommendations to consider
