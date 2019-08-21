@@ -52,7 +52,7 @@ class Data(object):
         self.Rte = sp.dok_matrix((self.n_users, self.n_items), dtype=np.float32)
 
         self.train_items, self.test_set = {}, {}
-        with open(train_file) as f_train, with open(test_file) as f_test:
+        with open(train_file) as f_train, open(test_file) as f_test:
             for l in f_train.readlines():
                 if len(l) == 0: break
                 l = l.strip('\n')
