@@ -15,7 +15,7 @@ def parse_args():
                         help='Specify the type of the adjacency (laplacian) matrix from {plain, norm, mean}.')
     parser.add_argument('--pretrain', type=int, default=0,
                         help='0: No pretrain, -1: Pretrain with the learned embeddings, 1:Pretrain with stored models.')
-    parser.add_argument('--epochs', type=int, default=10,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epoch.')
     parser.add_argument('--reg', type=float, default=1e-5,
                         help='l2 reg.')

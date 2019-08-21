@@ -5,7 +5,6 @@ Neural Graph Collaborative Filtering (NGCF) by Wang Xiang et al.
 import numpy as np
 import random as rd
 import scipy.sparse as sp
-import pdb
 
 from time import time
 
@@ -16,11 +15,11 @@ class Data(object):
         self.batch_size = batch_size
 
         train_file = path+'train.txt'
+        # are we running validation or "final" test
         test_file = path+'valid.txt' if val else path+'test.txt'
 
         self.n_users, self.n_items = 0, 0
         self.n_train, self.n_test = 0, 0
-        self.neg_pools = {}
 
         self.exist_users = []
 
@@ -53,33 +52,32 @@ class Data(object):
         self.Rte = sp.dok_matrix((self.n_users, self.n_items), dtype=np.float32)
 
         self.train_items, self.test_set = {}, {}
-        with open(train_file) as f_train:
-            with open(test_file) as f_test:
-                for l in f_train.readlines():
-                    if len(l) == 0: break
-                    l = l.strip('\n')
+        with open(train_file) as f_train, with open(test_file) as f_test:
+            for l in f_train.readlines():
+                if len(l) == 0: break
+                l = l.strip('\n')
+                items = [int(i) for i in l.split(' ')]
+                uid, train_items = items[0], items[1:]
+
+                for i in train_items:
+                    self.Rtr[uid, i] = 1.
+
+                self.train_items[uid] = train_items
+
+            for l in f_test.readlines():
+                if len(l) == 0: break
+                l = l.strip('\n')
+                try:
                     items = [int(i) for i in l.split(' ')]
-                    uid, train_items = items[0], items[1:]
+                except Exception:
+                    continue
 
-                    for i in train_items:
-                        self.Rtr[uid, i] = 1.
+                uid, test_items = items[0], items[1:]
 
-                    self.train_items[uid] = train_items
+                for i in train_items:
+                    self.Rte[uid, i] = 1.
 
-                for l in f_test.readlines():
-                    if len(l) == 0: break
-                    l = l.strip('\n')
-                    try:
-                        items = [int(i) for i in l.split(' ')]
-                    except Exception:
-                        continue
-
-                    uid, test_items = items[0], items[1:]
-
-                    for i in train_items:
-                        self.Rte[uid, i] = 1.
-
-                    self.test_set[uid] = test_items
+                self.test_set[uid] = test_items
 
     def get_adj_mat(self):
         try:
@@ -170,6 +168,7 @@ class Data(object):
         print('n_train=%d, n_test=%d, sparsity=%.5f' % (self.n_train, self.n_test, (self.n_train + self.n_test)/(self.n_users * self.n_items)))
 
 
+# This should go to a tests folder
 def test_data_building_process(data_path, org_dataset, user_map_fname, item_map_fname,
     generator, N=10):
     """

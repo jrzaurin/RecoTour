@@ -92,16 +92,6 @@ def hit_at_k(r, k):
         return 0.
 
 
-def auc(true, pred):
-    """Simple wrap up around sklearn's roc_auc_score
-    """
-    try:
-        res = roc_auc_score(true, pred)
-    except Exception:
-        res = 0.
-    return res
-
-
 def get_auc(item_score, user_pos_test):
     """Wrap up around sklearn's roc_auc_score
     Parameters:
@@ -138,7 +128,7 @@ def get_auc(item_score, user_pos_test):
 def ranklist_by_heapq(user_pos_test, test_items, rating, Ks):
     """
     Retursn a binary list, where relevance is nonzero, based on a ranked list
-    with the n largest scores. For consistency with ranklist_by_sorted, also
+    with the N largest scores. For consistency with ranklist_by_sorted, also
     returns auc=0 (since auc does not make sense within a mini batch)
     Parameters:
     ----------
