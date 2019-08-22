@@ -154,8 +154,7 @@ def test_gpu(user_emb, item_emb, R_tr, R_te, Ks):
         _, test_indices = torch.topk(test_pred, dim=1, k=max(Ks))
         for k in Ks:
             topk_mask = torch.zeros_like(test_pred)
-            source = torch.tensor(1.0).cuda() if use_cuda else torch.tensor(1.0)
-            topk_mask.scatter_(dim=1, index=test_indices[:, :k], src=source)
+            topk_mask.scatter_(dim=1, index=test_indices[:, :k], src=torch.tensor(1.0).cuda())
             test_pred_topk = topk_mask * test_pred
             acc_result = (test_pred_topk != 0) & (test_pred_topk == test_true)
             pr_k = acc_result.sum().float() / (user_emb.weight.shape[0] * k)
