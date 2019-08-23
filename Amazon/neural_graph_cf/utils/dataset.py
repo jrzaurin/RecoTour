@@ -4,6 +4,7 @@ Neural Graph Collaborative Filtering (NGCF) by Wang Xiang et al.
 '''
 import numpy as np
 import random as rd
+import os
 import scipy.sparse as sp
 
 from time import time
@@ -14,9 +15,9 @@ class Data(object):
         self.path = path
         self.batch_size = batch_size
 
-        train_file = path+'train.txt'
+        train_file = os.path.join(path,'train.txt')
         # are we running validation or "final" test
-        test_file = path+'valid.txt' if val else path+'test.txt'
+        test_file = os.path.join(path,'valid.txt') if val else  os.path.join(path,'test.txt')
 
         self.n_users, self.n_items = 0, 0
         self.n_train, self.n_test = 0, 0

@@ -2,13 +2,13 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run NGCF.")
-    parser.add_argument('--data_path', type=str, default='Data/',
+    parser.add_argument('--data_path', type=str, default='Data',
                         help='Input data path.')
-    parser.add_argument('--dataset', nargs='?', default='amazon-movies/',
+    parser.add_argument('--dataset', nargs='?', default='gowalla',
                         help='Dataset name')
-    parser.add_argument('--model_path', type=str, default='model_weights/',
+    parser.add_argument('--model_path', type=str, default='model_weights',
                         help='Store model path.')
-    parser.add_argument('--results_path', type=str, default='results/',
+    parser.add_argument('--results_path', type=str, default='results',
                         help='Store results path.')
 
     parser.add_argument('--adj_type', nargs='?', default='norm',
@@ -35,8 +35,12 @@ def parse_args():
     parser.add_argument('--mess_dropout', type=int, default=0.1,
                         help='Message dropout.')
 
+    parser.add_argument('--n_folds', type=int, default=100,
+                        help='number of partitions for the adjacency matrix')
     parser.add_argument('--Ks', type=str, default='[20, 40, 60, 80, 100]',
                         help='k order of metric evaluation (e.g. NDCG@k)')
+    parser.add_argument('--test_with', type=str, default='cpu',
+                        help='whether to use the GPU enabled test function')
     parser.add_argument('--print_every', type=int, default=1,
                         help='print results every N epochs')
     parser.add_argument('--eval_every', type=int, default=1,
