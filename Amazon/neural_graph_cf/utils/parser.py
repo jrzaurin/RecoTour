@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--mess_dropout', type=int, default=0.1,
                         help='Message dropout.')
 
-    parser.add_argument('--n_folds', type=int, default=100,
+    parser.add_argument('--n_folds', type=int, default=10,
                         help='number of partitions for the adjacency matrix')
     parser.add_argument('--Ks', type=str, default='[20, 40, 60, 80, 100]',
                         help='k order of metric evaluation (e.g. NDCG@k)')
