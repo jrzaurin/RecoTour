@@ -93,7 +93,7 @@ class NGCF_BPR(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.constant_(m.bias, 0.)
+                nn.init.xavier_uniform_(m.bias)
 
     def _split_A_hat(self, X):
         """
