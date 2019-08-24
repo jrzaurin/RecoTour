@@ -32,7 +32,7 @@ def parse_args():
                         help='Graph Node dropout.')
     parser.add_argument('--edge_dropout', type=float, default=0.,
                         help='Graph edge dropout.')
-    parser.add_argument('--mess_dropout', type=int, default=0.1,
+    parser.add_argument('--mess_dropout', type=float, default=0.1,
                         help='Message dropout.')
 
     parser.add_argument('--n_folds', type=int, default=10,
