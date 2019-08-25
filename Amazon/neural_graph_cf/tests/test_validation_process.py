@@ -1,3 +1,11 @@
+'''
+Test that the test process I implemented lead to identical results to that of
+the original code release. The tf code here is a direct copy and paste from
+here:
+https://github.com/xiangwang1223/neural_graph_collaborative_filtering/blob/master/NGCF/utility/batch_test.py
+where I have removed unnecessary parts and adapted when neccesary
+'''
+
 import numpy as np
 
 from multiprocessing import Pool
@@ -18,7 +26,7 @@ user_pos_test = np.random.choice(test_items, te_items)
 x = (np.random.choice(n_users, 1), np.random.rand(n_items))
 Ks = [10,20]
 
-# Commented out parts of the code that are not neccessary for this "dummy" test
+# Commented out parts of the code that are not neccessary for this test
 import torch
 from torch_metrics import ranklist_by_heapq, get_performance
 
@@ -109,6 +117,55 @@ def tf_test_one_user(x):
     return get_performance(user_pos_test, r, auc, Ks)
 
 
+# The original code has the following loop and condition:
+        # if batch_test_flag:
+
+        #     n_item_batchs = ITEM_NUM // i_batch_size + 1
+        #     rate_batch = np.zeros(shape=(len(user_batch), ITEM_NUM))
+
+        #     i_count = 0
+        #     for i_batch_id in range(n_item_batchs):
+        #         i_start = i_batch_id * i_batch_size
+        #         i_end = min((i_batch_id + 1) * i_batch_size, ITEM_NUM)
+
+        #         item_batch = range(i_start, i_end)
+
+        #         if drop_flag == False:
+        #             i_rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
+        #                                                         model.pos_items: item_batch})
+        #         else:
+        #             i_rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
+        #                                                         model.pos_items: item_batch,
+        #                                                         model.node_dropout: [0.]*len(eval(args.layer_size)),
+        #                                                         model.mess_dropout: [0.]*len(eval(args.layer_size))})
+        #         rate_batch[:, i_start: i_end] = i_rate_batch
+        #         i_count += i_rate_batch.shape[1]
+
+        #     assert i_count == ITEM_NUM
+
+        # else:
+        #     item_batch = range(ITEM_NUM)
+
+        #     if drop_flag == False:
+        #         rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
+        #                                                       model.pos_items: item_batch})
+        #     else:
+        #         rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
+        #                                                       model.pos_items: item_batch,
+        #                                                       model.node_dropout: [0.] * len(eval(args.layer_size)),
+        #                                                       model.mess_dropout: [0.] * len(eval(args.layer_size))})
+
+# But for us batch_test_flag will always be False (in my implementation does
+# not even exits) and for this simple test we will assume no dropout, so, all
+# that code turns
+
+#                 rate_batch = sess.run(model.batch_ratings, {model.users: user_batch,
+#                                                               model.pos_items: item_batch})
+
+# which in reality is
+
+#     rate_batch = tf.matmul(user_emb, item_emb, transpose_a=False, transpose_b=True)
+
 def tf_test():
     result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
               'hit_ratio': np.zeros(len(Ks)), 'auc': 0.}
@@ -136,3 +193,5 @@ def tf_test():
 tf_res_one_user = tf_test_one_user(x)
 tf_res = tf_test()
 
+print(tf_res_one_user, torch_res_one_user)
+print(tf_res, torch_res)

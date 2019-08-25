@@ -1,3 +1,8 @@
+'''
+Test that the metrics I implemented lead to identical results to that of the
+original code release. In this dir tf_metrics.py is a direct copy and paste
+from here: https://github.com/xiangwang1223/neural_graph_collaborative_filtering/blob/master/NGCF/utility/metrics.py
+'''
 import numpy as np
 
 np.random.seed(1)
