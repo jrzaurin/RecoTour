@@ -9,20 +9,20 @@ import numpy as np
 import tensorflow as tf
 import torch
 import torch.nn.functional as F
+import scipy.sparse as sp
 
 from torch import nn
-import pdb
-
 
 np.random.seed(1)
-n_users = 100
-n_items = 200
+n_users = 1000
+n_items = 2000
 n_emb = 24
 w1_units = [12, 6]
 w2_units = [12, 6]
 n_layers = len(w1_units)
-R = np.random.choice(2, (300, 300), p=[0.8,0.2])
-A = torch.from_numpy(R)
+n_fold = 10
+R = np.random.choice(2, (n_users+n_items, n_users+n_items), p=[0.9,0.1])
+R  = sp.csr_matrix(R)
 
 # ----------
 # PYTORCH
@@ -48,14 +48,43 @@ for i in range(1,len(features)):
     W2[i-1].weight = nn.Parameter(w2)
     W2[i-1].bias = nn.Parameter(b2)
 
+
+def convert_sp_mat_to_sp_tensor_torch(X):
+    coo = X.tocoo().astype(np.float32)
+    i = torch.LongTensor(np.mat([coo.row, coo.col]))
+    v = torch.FloatTensor(coo.data)
+    return torch.sparse.FloatTensor(i, v, coo.shape)
+
+
+def split_A_hat_torch(X):
+    A_fold_hat = []
+
+    fold_len = (n_users + n_items) // n_fold
+    for i_fold in range(n_fold):
+        start = i_fold * fold_len
+        if i_fold == n_fold -1:
+            end = n_users + n_items
+        else:
+            end = (i_fold + 1) * fold_len
+
+        A_fold_hat.append(convert_sp_mat_to_sp_tensor_torch(X[start:end]))
+    return A_fold_hat
+
+
 def torch_forward():
+
+    A_fold_hat = split_A_hat_torch(R)
 
     ego_embeddings = torch.cat([embeddings_user, embeddings_item], 0)
     pred_embeddings = [ego_embeddings]
 
     for k in range(n_layers):
 
-        weighted_sum_emb = torch.mm(A.float(), ego_embeddings.float())
+        temp_embed = []
+        for f in range(n_fold):
+            temp_embed.append(torch.sparse.mm(A_fold_hat[f], ego_embeddings.float()))
+
+        weighted_sum_emb = torch.cat(temp_embed, 0)
         affinity_emb = ego_embeddings.mul(weighted_sum_emb)
 
         t1 = W1[k](weighted_sum_emb)
@@ -124,17 +153,39 @@ A = tf.convert_to_tensor(A.float().numpy())
         #     # sum messages of neighbors.
         #     side_embeddings = tf.concat(temp_embed, 0)
 
-# But here we will not be using dropout and A is small enough so we can directly do:
-#         side_embeddings = tf.matmul(A, ego_embeddings)
-# From there on is the same
+def convert_sp_mat_to_sp_tensor_tf(X):
+    coo = X.tocoo().astype(np.float32)
+    indices = np.mat([coo.row, coo.col]).transpose()
+    return tf.SparseTensor(indices, coo.data, coo.shape)
+
+def split_A_hat_tf(X):
+    A_fold_hat = []
+
+    fold_len = (n_users + n_items) // n_fold
+    for i_fold in range(n_fold):
+        start = i_fold * fold_len
+        if i_fold == n_fold -1:
+            end = n_users + n_items
+        else:
+            end = (i_fold + 1) * fold_len
+
+        A_fold_hat.append(convert_sp_mat_to_sp_tensor_tf(X[start:end]))
+    return A_fold_hat
+
 def tf_forward():
+
+    A_fold_hat = split_A_hat_tf(R)
 
     ego_embeddings = tf.concat([weights['user_embedding'], weights['item_embedding']], axis=0)
     all_embeddings = [ego_embeddings]
 
     for k in range(0, n_layers):
 
-        side_embeddings = tf.matmul(A, ego_embeddings)
+        temp_embed = []
+        for f in range(n_fold):
+            temp_embed.append(tf.sparse_tensor_dense_matmul(A_fold_hat[f], ego_embeddings))
+
+        side_embeddings = tf.concat(temp_embed, 0)
         bi_embeddings = tf.multiply(ego_embeddings, side_embeddings)
 
         sum_embeddings = tf.nn.leaky_relu(

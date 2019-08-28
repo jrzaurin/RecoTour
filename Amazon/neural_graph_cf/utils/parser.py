@@ -2,9 +2,9 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run NGCF.")
-    parser.add_argument('--data_path', type=str, default='Data',
+    parser.add_argument('--data_path', type=str, default='/home/ubuntu/projects/RecoTour/datasets/',
                         help='Input data path.')
-    parser.add_argument('--dataset', nargs='?', default='gowalla',
+    parser.add_argument('--dataset', nargs='?', default='Amazon',
                         help='Dataset name')
     parser.add_argument('--model_path', type=str, default='model_weights',
                         help='Store model path.')

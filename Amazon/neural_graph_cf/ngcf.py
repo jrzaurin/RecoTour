@@ -51,10 +51,10 @@ def node_dropout_sparse(X, keep_prob):
     return  X_w_dropout.mul(1./keep_prob)
 
 
-class NGCF_BPR(nn.Module):
+class NGCF(nn.Module):
     def __init__(self, n_users, n_items, emb_dim, adjacency_matrix, layers, node_dropout,
-        mess_dropout, regularization, n_fold, batch_size, dropout_mode="edge"):
-        super(NGCF_BPR, self).__init__()
+        mess_dropout, regularization, n_fold, dropout_mode="edge"):
+        super(NGCF, self).__init__()
 
         self.n_users = n_users
         self.n_items = n_items
@@ -68,7 +68,6 @@ class NGCF_BPR(nn.Module):
         self.mess_dropout = mess_dropout*self.n_layers
         self.reg = regularization
         self.n_fold = n_fold
-        self.batch_size = batch_size
         # whether edge or node dropout. See notebooks Chapter 04
         self.dropout_mode = dropout_mode
 
@@ -93,7 +92,6 @@ class NGCF_BPR(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
-                nn.init.xavier_uniform_(m.bias)
 
     def _split_A_hat(self, X):
         """
@@ -180,60 +178,3 @@ class NGCF_BPR(nn.Module):
         l2reg  = self.reg*l2norm
 
         return -log_prob + l2reg
-
-
-class NGCF_BCE(NGCF_BPR):
-    """
-    Class that will get the outputs from _create_ngcf_embed and pass them
-    through a series of linear layer before making a 1/0 prediction
-    """
-    def __init__(self, n_users, n_items, emb_dim, adjacency_matrix, layers,
-        node_dropout, mess_dropout, regularization, n_fold, mlp_layers, mlp_dropouts):
-        super().__init__(n_users, n_items, emb_dim, adjacency_matrix, layers,
-        node_dropout, mess_dropout, regularization, n_fold)
-
-        self.mlp = nn.Sequential()
-        features = [emb_dim + np.sum(layers)] + mlp_layers
-        for i in range(1,len(features)):
-            self.mlp.add_module("linear%d" %i, nn.Linear(features[i-1],features[i]))
-            self.mlp.add_module("relu%d" %i, torch.nn.ReLU())
-            self.mlp.add_module("dropout%d" %i , torch.nn.Dropout(p=mlp_dropouts[i-1]))
-        self.out = nn.Linear(in_features=features[-1], out_features=1)
-
-    def forward(self,u,i):
-
-        if self.node_dropout > 0.:
-            self.A_fold_hat = self._split_A_hat_node_dropout(self.A)
-
-        ego_embeddings = torch.cat([self.embeddings_user, self.embeddings_item], 0)
-        pred_embeddings = [ego_embeddings]
-
-        for k in range(self.n_layers):
-
-            temp_embed = []
-            for f in range(self.n_fold):
-                temp_embed.append(torch.sparse.mm(self.A_fold_hat[f], ego_embeddings))
-
-            weighted_sum_emb = torch.cat(temp_embed, 0)
-            affinity_emb = ego_embeddings.mul(weighted_sum_emb)
-
-            t1 = self.W1[k](weighted_sum_emb)
-            t2 = self.W2[k](affinity_emb)
-
-            ego_embeddings = nn.Dropout(self.mess_dropout[k])(F.leaky_relu(t1 + t2))
-            norm_embeddings = F.normalize(ego_embeddings, p=2, dim=1)
-
-            pred_embeddings += [norm_embeddings]
-
-        pred_embeddings = torch.cat(pred_embeddings, 1)
-        g_embeddings_user, g_embeddings_item = pred_embeddings.split([self.n_users, self.n_items], 0)
-
-        u_emb = g_embeddings_user[u]
-        i_emb = g_embeddings_item[i]
-
-        emb_vector = torch.cat([u_emb,i_emb], dim=1)
-        emb_vector = self.mlp(emb_vector)
-        preds = torch.sigmoid(self.out(emb_vector))
-
-        return preds
-

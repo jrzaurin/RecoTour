@@ -2,6 +2,9 @@ import numpy as np
 import argparse
 import csv
 
+from pathlib import Path
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Generate toy/small dataset.")
@@ -14,6 +17,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_interactions', type=int, default=51,
         help="man number of interactions per user")
     args = parser.parse_args()
+
+    DATA_PATH = Path("/home/ubuntu/projects/RecoTour/datasets/toy_data")
 
     np.random.seed(1)
 
@@ -38,8 +43,8 @@ if __name__ == '__main__':
 
     train_test = [train_test_split(i[0],i[1]) for i in interactions]
 
-    train_fname = 'Data/toy_data/train.txt'
-    test_fname = 'Data/toy_data/test.txt'
+    train_fname = DATA_PATH/'train.txt'
+    test_fname = DATA_PATH/'test.txt'
 
     with open(train_fname, 'w') as trf, open(test_fname, 'w') as tef:
         trwrt = csv.writer(trf, delimiter=' ')

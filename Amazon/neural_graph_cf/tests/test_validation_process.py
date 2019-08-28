@@ -179,7 +179,8 @@ def tf_test():
 
     rate_batch = tf.matmul(user_emb, item_emb, transpose_a=False, transpose_b=True)
     user_batch_rating_uid = zip(user_batch, rate_batch)
-    batch_result = p.map(tf_test_one_user, user_batch_rating_uid)
+    batch_result = [tf_test_one_user(x) for x in user_batch_rating_uid]
+    # batch_result = p.map(tf_test_one_user, user_batch_rating_uid)
 
     for re in batch_result:
         result['precision'] += re['precision']/n_test_users
