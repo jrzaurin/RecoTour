@@ -1,57 +1,58 @@
 import numpy as np
 import heapq
-
 from sklearn.metrics import roc_auc_score
 
 
-def recall_at_k(r, k, n_inter):
-    """recall @ k
-    Parameters:
-    ----------
-    r: Iterable
-        binary iterable (nonzero is relevant).
-    k: Int
-        number of recommendations to consider
-    n_inter: Int
-        number of interactions
-    Returns:
-    ----------
-    recall @ k
-    """
+def recall(rank, ground_truth, N):
+    return len(set(rank[:N]) & set(ground_truth)) / float(len(set(ground_truth)))
+
+
+def recall_at_k(r, k, all_pos_num):
     r = np.asfarray(r)[:k]
-    return np.sum(r) / n_inter
+    return np.sum(r) / all_pos_num
 
 
 def precision_at_k(r, k):
-    """precision @ k
-    Parameters:
-    ----------
-    r: Iterable
-        binary iterable (nonzero is relevant).
-    k: Int
-        number of recommendations to consider
+    """Score is precision @ k
+    Relevance is binary (nonzero is relevant).
     Returns:
-    ----------
-    Precision @ k
+        Precision @ k
+    Raises:
+        ValueError: len(r) must be >= k
     """
     assert k >= 1
     r = np.asarray(r)[:k]
     return np.mean(r)
 
 
-def dcg_at_k(r, k, method=1):
-    """ discounted cumulative gain (dcg) @ k
-    Parameters:
-    ----------
-    r: Iterable
-        Relevance is positive real values. If binary, nonzero is relevant.
-    k: Int
-        number of recommendations to consider
-    method: Int
-        one of 0 or 1. Simply, different dcg implementations
+def average_precision(r,cut):
+    """Score is average precision (area under PR curve)
+    Relevance is binary (nonzero is relevant).
     Returns:
-    ----------
-    dcg @ k
+        Average precision
+    """
+    r = np.asarray(r)
+    out = [precision_at_k(r, k + 1) for k in range(cut) if r[k]]
+    if not out:
+        return 0.
+    return np.sum(out)/float(min(cut, np.sum(r)))
+
+
+def mean_average_precision(rs):
+    """Score is mean average precision
+    Relevance is binary (nonzero is relevant).
+    Returns:
+        Mean average precision
+    """
+    return np.mean([average_precision(r) for r in rs])
+
+
+def dcg_at_k(r, k, method=1):
+    """Score is discounted cumulative gain (dcg)
+    Relevance is positive real values.  Can use binary
+    as the previous methods.
+    Returns:
+        Discounted cumulative gain
     """
     r = np.asfarray(r)[:k]
     if r.size:
@@ -65,7 +66,11 @@ def dcg_at_k(r, k, method=1):
 
 
 def ndcg_at_k(r, k, method=1):
-    """ Normalized discounted cumulative gain @ k
+    """Score is normalized discounted cumulative gain (ndcg)
+    Relevance is positive real values.  Can use binary
+    as the previous methods.
+    Returns:
+        Normalized discounted cumulative gain
     """
     dcg_max = dcg_at_k(sorted(r, reverse=True), k, method)
     if not dcg_max:
@@ -74,17 +79,6 @@ def ndcg_at_k(r, k, method=1):
 
 
 def hit_at_k(r, k):
-    """hit ratio @ k
-    Parameters:
-    ----------
-    r: Iterable
-        binary iterable (nonzero is relevant).
-    k: Int
-        number of recommendations to consider
-    Returns:
-    ----------
-    hit ratio @ k
-    """
     r = np.array(r)[:k]
     if np.sum(r) > 0:
         return 1.
@@ -92,58 +86,7 @@ def hit_at_k(r, k):
         return 0.
 
 
-def get_auc(item_score, user_pos_test):
-    """Wrap up around sklearn's roc_auc_score
-    Parameters:
-    ----------
-    item_score: Dict
-        Dict. keys are item_ids, values are predictions
-    user_pos_test: List
-        List with the items that the user actually interacted with
-    Returns:
-    ----------
-    res: Float
-        roc_auc_score
-    """
-    item_score = sorted(item_score.items(), key=lambda kv: kv[1])
-    item_score.reverse()
-    item_id = [x[0] for x in item_score]
-    score = [x[1] for x in item_score]
-
-    r = []
-    for i in item_id:
-        if i in user_pos_test:
-            r.append(1)
-        else:
-            r.append(0)
-
-    try:
-        res = roc_auc_score(r, score)
-    except Exception:
-        res = 0.
-
-    return res
-
-
 def ranklist_by_heapq(user_pos_test, test_items, rating, Ks):
-    """
-    Retursn a binary list, where relevance is nonzero, based on a ranked list
-    with the N largest scores. For consistency with ranklist_by_sorted, also
-    returns auc=0 (since auc does not make sense within a mini batch)
-    Parameters:
-    ----------
-    user_pos_test: List
-        List with the items that the user actually interacted with
-    test_items: List
-        List with the all items in the test dataset
-    rating: List
-        List with the ratings corresponding to test_items
-    Ks: Int or List
-        the k in @k
-    Returns:
-    ----------
-    r: binary list where nonzero in relevant
-    """
     item_score = {}
     for i in test_items:
         item_score[i] = rating[i]
@@ -157,62 +100,10 @@ def ranklist_by_heapq(user_pos_test, test_items, rating, Ks):
             r.append(1)
         else:
             r.append(0)
-    auc = 0.
-    return r, auc
+    return r
 
 
-def ranklist_by_sorted(user_pos_test, test_items, rating, Ks):
-    """
-    Retursn a binary list, where relevance is nonzero, based on a ranked list
-    with the n largest scores. Also returns the AUC
-    Parameters:
-    ----------
-    user_pos_test: List
-        List with the items that the user actually interacted with
-    test_items: List
-        List with the all items in the test dataset
-    rating: List
-        List with the ratings corresponding to test_items
-    Ks: Int or List
-        the k in @k
-    Returns:
-    ----------
-    r: binary list where nonzero in relevant
-    auc: testing roc_auc_score
-    """
-    item_score = {}
-    for i in test_items:
-        item_score[i] = rating[i]
-
-    K_max = max(Ks)
-    K_max_item_score = heapq.nlargest(K_max, item_score, key=item_score.get)
-
-    r = []
-    for i in K_max_item_score:
-        if i in user_pos_test:
-            r.append(1)
-        else:
-            r.append(0)
-    auc = get_auc(item_score, user_pos_test)
-    return r, auc
-
-
-def get_performance(user_pos_test, r, auc, Ks):
-    """wrap up around all other previous functions
-    ----------
-    user_pos_test: List
-        List with the items that the user actually interacted with
-    r: List
-        binary list where nonzero in relevant
-    auc: Float
-        sklearn's roc_auc_score
-    Ks: List
-        the k in @k
-    Returns:
-    ----------
-    dictionary of metrics
-    """
-
+def get_performance(user_pos_test, r, Ks):
     precision, recall, ndcg, hit_ratio = [], [], [], []
 
     for K in Ks:
@@ -222,4 +113,4 @@ def get_performance(user_pos_test, r, auc, Ks):
         hit_ratio.append(hit_at_k(r, K))
 
     return {'recall': np.array(recall), 'precision': np.array(precision),
-            'ndcg': np.array(ndcg), 'hit_ratio': np.array(hit_ratio), 'auc': auc}
+            'ndcg': np.array(ndcg), 'hit_ratio': np.array(hit_ratio)}
