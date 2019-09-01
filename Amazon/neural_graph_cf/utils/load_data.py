@@ -73,7 +73,7 @@ class Data(object):
 
                     uid, test_items = items[0], items[1:]
 
-                    for i in train_items:
+                    for i in test_items:
                         self.Rte[uid, i] = 1.
 
                     self.test_set[uid] = test_items

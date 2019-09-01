@@ -43,6 +43,8 @@ def parse_args():
                         help='print results every N epochs')
     parser.add_argument('--eval_every', type=int, default=1,
                         help='Evaluate every N epochs')
+    parser.add_argument('--test_with', type=str, default='cpu',
+                        help='test using cpu or gpu')
     parser.add_argument('--save_results', type=int, default=1,
                         help='Save metrics to a dataframe')
     parser.add_argument('--patience', type=int, default=10,

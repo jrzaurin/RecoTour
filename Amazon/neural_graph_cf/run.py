@@ -71,7 +71,7 @@ def test_one_user(x):
     return get_performance(user_pos_test, r, Ks)
 
 
-def test(model, users_to_test):
+def test_CPU(model, users_to_test):
     model.eval()
     result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
               'hit_ratio': np.zeros(len(Ks))}
@@ -109,6 +109,63 @@ def test(model, users_to_test):
 
     assert count == n_test_users
     pool.close()
+    return result
+
+
+def split_mtx(X, n_folds=10):
+    X_folds = []
+    fold_len = X.shape[0]//n_folds
+    for i in range(n_folds):
+        start = i * fold_len
+        if i == n_folds -1:
+            end = X.shape[0]
+        else:
+            end = (i + 1) * fold_len
+        X_folds.append(X[start:end])
+    return X_folds
+
+
+def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
+
+    ue_folds = split_mtx(u_emb)
+    tr_folds = split_mtx(Rtr)
+    te_folds = split_mtx(Rte)
+
+    fold_prec, fold_rec = {},{}
+    for ue_f, tr_f, te_f in zip(ue_folds, tr_folds, te_folds):
+
+        scores = torch.mm(ue_f, i_emb.t())
+        test_items = torch.from_numpy(te_f.todense()).float().cuda()
+        non_train_items = torch.from_numpy(1-(tr_f.todense())).float().cuda()
+        scores = scores * non_train_items
+        _, test_indices = torch.topk(scores, dim=1, k=max(Ks))
+
+        for k in Ks:
+            topk_preds = torch.zeros_like(scores).float()
+            topk_preds.scatter_(dim=1,index=test_indices[:, :k],src=torch.tensor(1.0))
+
+            TP = (test_items * topk_preds).sum(1)
+            # FP = (topk_preds - test_items).gather(1, test_indices[:, :k]).sum(1)
+            prec = TP/k
+            # prec = TP/(TP+FP)
+            rec = TP/test_items.sum(1)
+
+            try:
+                fold_prec[k].append(prec)
+                fold_rec[k].append(rec)
+            except KeyError:
+                fold_prec[k] = [prec]
+                fold_rec[k] = [rec]
+
+    # prec, rec =  {}, {}
+    # for k in Ks:
+    #     prec[k] = torch.cat(fold_prec[k]).mean()
+    #     rec[k] = torch.cat(fold_rec[k]).mean()
+    # prec, rec =  {}, {}
+    result = {'precision': [], 'recall': []}
+    for k in Ks:
+        result['precision'].append(torch.cat(fold_prec[k]).mean())
+        result['recall'].append(torch.cat(fold_rec[k]).mean())
     return result
 
 
@@ -167,16 +224,29 @@ if __name__ == '__main__':
         assert os.path.isfile(model_weights)
         model.load_state_dict(torch.load(model_weights))
         print("Computing metrics with pretrained weights")
-        users_to_test = list(data_generator.test_set.keys())
-        res = test(model, users_to_test)
+        if args.test_with == 'cpu':
+            users_to_test = list(data_generator.test_set.keys())
+            res = test_CPU(model, users_to_test)
+            print(
+                "Pretrained model", "\n",
+                "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
+                "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
+                "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
+                "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
+                )
+        elif args.test_with == 'gpu':
+            res = test_GPU(
+                model.u_g_embeddings.detach(),
+                model.i_g_embeddings.detach(),
+                data_generator.Rtr,
+                data_generator.Rte,
+                Ks)
+            print(
+                "Pretrained model", "\n",
+                "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
+                "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1])
+                )
         cur_best_pre = res['recall'][0]
-        print(
-            "Pretrained model", "\n",
-            "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
-            "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
-            "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
-            "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
-            )
     elif args.pretrain == -1:
         assert os.path.isfile(model_weights)
         state_dict = torch.load(model_weights)
@@ -199,24 +269,40 @@ if __name__ == '__main__':
 
         if epoch % args.eval_every  == (args.eval_every - 1):
             with torch.no_grad():
-                t2 = time()
-                users_to_test = list(data_generator.test_set.keys())
-                res = test(model, users_to_test)
-            print(
-                "VALIDATION:","\n",
-                "Epoch: {}, {:.2f}s".format(epoch, time()-t2),"\n",
-                "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
-                "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
-                "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
-                "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
-                )
+                if args.test_with == 'cpu':
+                    t2 = time()
+                    users_to_test = list(data_generator.test_set.keys())
+                    res = test_CPU(model, users_to_test)
+                    print(
+                        "VALIDATION:","\n",
+                        "Epoch: {}, {:.2f}s".format(epoch, time()-t2),"\n",
+                        "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
+                        "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
+                        "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
+                        "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
+                        )
+                if args.test_with == 'gpu':
+                    t2 = time()
+                    res = test_GPU(
+                        model.u_g_embeddings.detach(),
+                        model.i_g_embeddings.detach(),
+                        data_generator.Rtr,
+                        data_generator.Rte,
+                        Ks)
+                    print(
+                        "VALIDATION:","\n",
+                        "Epoch: {}, {:.2f}s".format(epoch, time()-t2),"\n",
+                        "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
+                        "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1])
+                        )
+
             log_value = res['recall'][0]
             cur_best_pre, stopping_step, should_stop = \
             early_stopping(log_value, cur_best_pre, stopping_step, patience)
 
         if should_stop == True: break
 
-        if stopping_step == 0:
+        if (stopping_step == 0) & (args.save_results):
             torch.save(model.state_dict(), model_weights)
             try:
                 final_loss, final_res = loss, res
