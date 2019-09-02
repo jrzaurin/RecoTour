@@ -4,14 +4,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run NGCF.")
     parser.add_argument('--data_dir', type=str, default='Data/',
                         help='Input data path.')
-    parser.add_argument('--dataset', nargs='?', default='gowalla',
+    parser.add_argument('--dataset', type=str, default='gowalla',
                         help='Dataset name')
     parser.add_argument('--results_dir', type=str, default='results',
                         help='Store model path.')
 
     parser.add_argument('--model', type=str, default='ngcf',
                         help='Specify the model {ngcf, bpr}.')
-    parser.add_argument('--adj_type', nargs='?', default='norm',
+    parser.add_argument('--adj_type', type=str, default='norm',
                         help='Specify the type of the adjacency (laplacian) matrix from {plain, norm, mean}.')
     parser.add_argument('--pretrain', type=int, default=0,
                         help='0: No pretrain, -1: Pretrain with the learned embeddings, 1:Pretrain with stored models.')
@@ -23,6 +23,8 @@ def parse_args():
                         help='l2 reg.')
     parser.add_argument('--lr', type=float, default=0.002,
                         help='Learning rate.')
+    parser.add_argument('--lr_scheduler', type=int, default=0,
+                        help='Boolean indicating if we use StepLR scheduler.')
 
     parser.add_argument('--emb_dim', type=int, default=32,
                         help='number of embeddings.')
@@ -43,13 +45,13 @@ def parse_args():
                         help='k order of metric evaluation (e.g. NDCG@k)')
     parser.add_argument('--print_every', type=int, default=1,
                         help='print results every N epochs')
-    parser.add_argument('--eval_every', type=int, default=1,
+    parser.add_argument('--eval_every', type=int, default=5,
                         help='Evaluate every N epochs')
     parser.add_argument('--test_with', type=str, default='cpu',
                         help='test using cpu or gpu')
     parser.add_argument('--save_results', type=int, default=1,
                         help='Save metrics to a dataframe')
-    parser.add_argument('--patience', type=int, default=10,
+    parser.add_argument('--patience', type=int, default=2,
                         help='Patience for early stopping')
 
     return parser.parse_args()

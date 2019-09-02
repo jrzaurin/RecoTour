@@ -1,3 +1,10 @@
+'''
+This code is mostly taken from here (with some adaptations):
+https://github.com/xiangwang1223/neural_graph_collaborative_filtering
+
+This is part of my Pytorch adaptation of:
+Wang Xiang et al. Neural Graph Collaborative Filtering. In SIGIR 2019.
+'''
 import numpy as np
 import random as rd
 import os

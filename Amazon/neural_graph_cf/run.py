@@ -9,13 +9,13 @@ import multiprocessing
 from time import time
 from collections import defaultdict
 from multiprocessing import Pool
+from torch.optim.lr_scheduler import StepLR
+
 from utils.load_data import Data
 from utils.metrics import ranklist_by_heapq, get_performance
 from utils.parser import parse_args
 from utils.radam import RAdam, AdamW
 from ngcf import NGCF, BPR
-
-import pdb
 
 cores = multiprocessing.cpu_count()
 use_cuda = torch.cuda.is_available()
@@ -41,7 +41,7 @@ def early_stopping(log_value, best_value, stopping_step, patience, expected_orde
     return best_value, stopping_step, should_stop
 
 
-def train(model, data_generator, optimizer):
+def train(model, data_generator, optimizer, scheduler):
     model.train()
     n_batch = data_generator.n_train // data_generator.batch_size + 1
     running_loss=0
@@ -51,11 +51,17 @@ def train(model, data_generator, optimizer):
         loss = model(u,i,j)
         loss.backward()
         optimizer.step()
+        if scheduler:
+            scheduler.step()
         running_loss += loss.item()
     return running_loss
 
 
 def test_one_user(x):
+    """
+    Test process for one user:
+    x is a tuple with user_id and corresponding item ratings
+    """
     rating = x[0]
     u = x[1]
 
@@ -73,6 +79,9 @@ def test_one_user(x):
 
 
 def test_CPU(model, users_to_test):
+    """
+    Distributes through "cores" the test_one_user function, for all users
+    """
     model.eval()
     result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
               'hit_ratio': np.zeros(len(Ks))}
@@ -114,6 +123,9 @@ def test_CPU(model, users_to_test):
 
 
 def split_mtx(X, n_folds=10):
+    """
+    Split a matrix/Tensor into n_folds
+    """
     X_folds = []
     fold_len = X.shape[0]//n_folds
     for i in range(n_folds):
@@ -126,10 +138,22 @@ def split_mtx(X, n_folds=10):
     return X_folds
 
 
-def ndcg_at_k_gpu(test_items, scores, test_indices, k):
-    preds = torch.zeros_like(scores).float()
-    preds.scatter_(dim=1,index=test_indices,src=torch.tensor(1.0).cuda())
-    r = (test_items * preds).gather(1, test_indices)
+def ndcg_at_k_gpu(pred_items, test_items, test_indices, k):
+    """
+    Parameters:
+    ----------
+    pred_items: Tensor dim(None, n_items)
+        binary tensor with 1s in those locations corresponding to the predicted item interactions
+    test_items: Tensor dim(None, n_items)
+        binary tensor with 1s in locations corresponding to the REAL test interactions
+    test_indices: Tensor dim(None, max(Ks))
+        tensor with the location of the topk predicted items
+    k: int
+    Returns:
+    -------
+    ndcg@k
+    """
+    r = (test_items * pred_items).gather(1, test_indices)
     f = torch.from_numpy(np.log2(np.arange(2, k+2))).float().cuda()
     dcg = (r[:, :k]/f).sum(1)
     dcg_max = (torch.sort(r, dim=1, descending=True)[0][:, :k]/f).sum(1)
@@ -139,7 +163,23 @@ def ndcg_at_k_gpu(test_items, scores, test_indices, k):
 
 
 def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
-
+    """
+    Parameters:
+    -----------
+    u_emb: Tensor
+        User (g) embeddings
+    i_emb: Tensor
+        Item (g) embeddings
+    Rtr: sparse matrix
+        Matrix with the training interactions
+    Rte: sparse matrix
+        Matrix with the testing interactions
+    Ks : List
+        list of k-order for the metrics
+    Returns:
+    result: Dict of Lists
+        Dictionary with lists correponding to the metrics at order k for k in Ks
+    """
     ue_folds = split_mtx(u_emb)
     tr_folds = split_mtx(Rtr)
     te_folds = split_mtx(Rte)
@@ -149,10 +189,14 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
     for ue_f, tr_f, te_f in zip(ue_folds, tr_folds, te_folds):
 
         scores = torch.mm(ue_f, i_emb.t())
+
         test_items = torch.from_numpy(te_f.todense()).float().cuda()
         non_train_items = torch.from_numpy(1-(tr_f.todense())).float().cuda()
         scores = scores * non_train_items
+
         _, test_indices = torch.topk(scores, dim=1, k=max(Ks))
+        pred_items = torch.zeros_like(scores).float()
+        pred_items.scatter_(dim=1,index=test_indices,src=torch.tensor(1.0).cuda())
 
         for k in Ks:
             topk_preds = torch.zeros_like(scores).float()
@@ -162,7 +206,7 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
             prec = TP/k
             rec = TP/test_items.sum(1)
             hit_r = (TP > 0).float()
-            ndcg = ndcg_at_k_gpu(test_items, scores, test_indices, k)
+            ndcg = ndcg_at_k_gpu(pred_items, test_items, test_indices, k)
 
             fold_prec[k].append(prec)
             fold_rec[k].append(rec)
@@ -249,15 +293,15 @@ if __name__ == '__main__':
             "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
             "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
             )
-        # cur_best_metric = res['recall'][0]
+        cur_best_metric = res['recall'][0]
     elif args.pretrain == -1:
         assert os.path.isfile(model_weights)
         state_dict = torch.load(model_weights)
         model.u_embeddings = torch.nn.Parameter(state_dict['u_embeddings'])
         model.i_embeddings = torch.nn.Parameter(state_dict['i_embeddings'])
-    #     cur_best_metric = 0.
-    # else:
-    #     cur_best_metric = 0.
+        cur_best_metric = 0.
+    else:
+        cur_best_metric = 0.
 
     if args.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -266,11 +310,16 @@ if __name__ == '__main__':
     elif args.optimizer == 'radam':
         optimizer = RAdam(model.parameters(), lr=args.lr)
 
+    if args.lr_scheduler:
+        scheduler = StepLR(optimizer, step_size=args.n_epochs//4, gamma=0.5)
+    else:
+        scheduler = None
+
     cur_best_loss, stopping_step, should_stop = 1e3, 0, False
     for epoch in range(args.n_epochs):
 
         t1 = time()
-        loss = train(model, data_generator, optimizer)
+        loss = train(model, data_generator, optimizer, scheduler)
 
         if epoch % args.print_every  == (args.print_every - 1):
             print("Epoch:{} {:.2f}s, Loss = {:.4f}".
@@ -300,13 +349,9 @@ if __name__ == '__main__':
                 "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
                 )
 
-            # log_value = res['recall'][0]
-            # cur_best_metric, stopping_step, should_stop = \
-            # early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
-
-        log_value = loss
-        cur_best_loss, stopping_step, should_stop = \
-        early_stopping(log_value, cur_best_loss, stopping_step, args.patience, expected_order='des')
+            log_value = res['recall'][0]
+            cur_best_metric, stopping_step, should_stop = \
+            early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
 
         if should_stop == True: break
 
