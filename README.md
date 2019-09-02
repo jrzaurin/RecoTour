@@ -51,7 +51,8 @@ be found in `using_ncdg.py` in the directory `py_scripts`.
 
 ## Amazon
 
-1. [Neural Collaborative Filtering](https://www.comp.nus.edu.sg/~xiangnan/papers/ncf.pdf)
+1. Neural Collaborative Filtering (Xiangnan He et al., 2017)
+2. Neural Graph Collaborative Filtering (Wang Xiang et al. 2019)
 
 I hope the code here is useful to someone. If you have any idea on how to
 improve the content of the repo, or you want to contribute, let me know.
