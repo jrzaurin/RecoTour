@@ -17,6 +17,8 @@ def parse_args():
                         help='0: No pretrain, -1: Pretrain with the learned embeddings, 1:Pretrain with stored models.')
     parser.add_argument('--n_epochs', type=int, default=100,
                         help='Number of epoch.')
+    parser.add_argument('--optimizer', type=str, default="adam",
+                        help='Specify the optimizer {adam, radam, adamw}')
     parser.add_argument('--reg', type=float, default=0.,
                         help='l2 reg.')
     parser.add_argument('--lr', type=float, default=0.002,

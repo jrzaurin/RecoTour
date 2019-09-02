@@ -7,10 +7,12 @@ import scipy.sparse as sp
 import multiprocessing
 
 from time import time
+from collections import defaultdict
 from multiprocessing import Pool
 from utils.load_data import Data
 from utils.metrics import ranklist_by_heapq, get_performance
 from utils.parser import parse_args
+from utils.radam import RAdam, AdamW
 from ngcf import NGCF, BPR
 
 import pdb
@@ -143,7 +145,8 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
     tr_folds = split_mtx(Rtr)
     te_folds = split_mtx(Rte)
 
-    fold_prec, fold_rec, fold_ndcg, fold_hr = {},{},{},{}
+    fold_prec, fold_rec, fold_ndcg, fold_hr = \
+        defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     for ue_f, tr_f, te_f in zip(ue_folds, tr_folds, te_folds):
 
         scores = torch.mm(ue_f, i_emb.t())
@@ -162,16 +165,10 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
             hit_r = (TP > 0).float()
             ndcg = ndcg_at_k_gpu(test_items, scores, test_indices, k)
 
-            try:
-                fold_prec[k].append(prec)
-                fold_rec[k].append(rec)
-                fold_ndcg[k].append(ndcg)
-                fold_hr[k].append(hit_r)
-            except KeyError:
-                fold_prec[k] = [prec]
-                fold_rec[k] = [rec]
-                fold_ndcg[k] = [ndcg]
-                fold_hr[k] = [hit_r]
+            fold_prec[k].append(prec)
+            fold_rec[k].append(rec)
+            fold_ndcg[k].append(ndcg)
+            fold_hr[k].append(hit_r)
 
     result = {'precision': [], 'recall': [], 'ndcg': [], 'hit_ratio': []}
     for k in Ks:
@@ -188,17 +185,16 @@ if __name__ == '__main__':
     data_dir = args.data_dir
     dataset = args.dataset
     batch_size = args.batch_size
-    lr = args.lr
+
+    layers = eval(args.layers)
     emb_dim = args.emb_dim
     reg = args.reg
-    n_epochs = args.n_epochs
-    layers = eval(args.layers)
     mess_dropout = [args.mess_dropout]*len(layers)
     node_dropout = args.node_dropout
     n_fold = args.n_fold
     adj_type = args.adj_type
+
     Ks = eval(args.Ks)
-    patience = args.patience
 
     data_generator = Data(path=data_dir + dataset, batch_size=batch_size)
     plain_adj, norm_adj, mean_adj = data_generator.get_adj_mat()
@@ -264,9 +260,15 @@ if __name__ == '__main__':
     else:
         cur_best_pre = 0.
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    if args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    elif args.optimizer == 'adamw':
+        optimizer = AdamW(model.parameters(), lr=args.lr)
+    elif args.optimizer == 'radam':
+        optimizer = RAdam(model.parameters(), lr=args.lr)
+
     stopping_step, should_stop = 0, False
-    for epoch in range(n_epochs):
+    for epoch in range(args.n_epochs):
 
         t1 = time()
         loss = train(model, data_generator, optimizer)
@@ -301,7 +303,7 @@ if __name__ == '__main__':
 
             log_value = res['recall'][0]
             cur_best_pre, stopping_step, should_stop = \
-            early_stopping(log_value, cur_best_pre, stopping_step, patience)
+            early_stopping(log_value, cur_best_pre, stopping_step, args.patience)
 
         if should_stop == True: break
 
