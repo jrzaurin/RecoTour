@@ -26,7 +26,7 @@ def parse_args():
                         help='number of embeddings.')
     parser.add_argument('--layers', type=str, default='[32,32]',
                         help='Output sizes of every layer')
-    parser.add_argument('--batch_size', type=int, default=1024,
+    parser.add_argument('--batch_size', type=int, default=5096,
                         help='Batch size.')
     parser.add_argument('--node_dropout', type=float, default=0.,
                         help='Graph Node dropout.')
