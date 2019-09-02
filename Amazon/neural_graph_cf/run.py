@@ -26,7 +26,6 @@ def early_stopping(log_value, best_value, stopping_step, patience, expected_orde
     than our patience, stop
     """
     assert expected_order in ['asc', 'des']
-
     if (expected_order == 'asc' and log_value >= best_value) or (expected_order == 'des' and log_value <= best_value):
         stopping_step = 0
         best_value = log_value
@@ -218,7 +217,7 @@ if __name__ == '__main__':
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
     model_weights = os.path.join(args.results_dir, modelfname)
-    results_tab = os.path.join(args.results_dir, 'results_df.p')
+    results_tab = os.path.join(args.results_dir, 'results_df.csv')
 
     if args.model == 'ngcf':
         model = NGCF(data_generator.n_users, data_generator.n_items, emb_dim, layers, reg,
@@ -250,15 +249,15 @@ if __name__ == '__main__':
             "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
             "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
             )
-        cur_best_pre = res['recall'][0]
+        # cur_best_metric = res['recall'][0]
     elif args.pretrain == -1:
         assert os.path.isfile(model_weights)
         state_dict = torch.load(model_weights)
         model.u_embeddings = torch.nn.Parameter(state_dict['u_embeddings'])
         model.i_embeddings = torch.nn.Parameter(state_dict['i_embeddings'])
-        cur_best_pre = 0.
-    else:
-        cur_best_pre = 0.
+    #     cur_best_metric = 0.
+    # else:
+    #     cur_best_metric = 0.
 
     if args.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -267,7 +266,7 @@ if __name__ == '__main__':
     elif args.optimizer == 'radam':
         optimizer = RAdam(model.parameters(), lr=args.lr)
 
-    stopping_step, should_stop = 0, False
+    cur_best_loss, stopping_step, should_stop = 1e3, 0, False
     for epoch in range(args.n_epochs):
 
         t1 = time()
@@ -301,9 +300,13 @@ if __name__ == '__main__':
                 "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
                 )
 
-            log_value = res['recall'][0]
-            cur_best_pre, stopping_step, should_stop = \
-            early_stopping(log_value, cur_best_pre, stopping_step, args.patience)
+            # log_value = res['recall'][0]
+            # cur_best_metric, stopping_step, should_stop = \
+            # early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
+
+        log_value = loss
+        cur_best_loss, stopping_step, should_stop = \
+        early_stopping(log_value, cur_best_loss, stopping_step, args.patience, expected_order='des')
 
         if should_stop == True: break
 
@@ -319,7 +322,7 @@ if __name__ == '__main__':
         for m in final_res.keys():
             for i,k in enumerate(Ks):
                 cols.append(m+'@'+str(k))
-                vals.append(round(final_res[m][i],4))
+                vals.append(final_res[m][i].cpu().numpy())
         cols = ['modelname', 'loss'] + cols
         vals = [modelfname, final_loss] + vals
         if not os.path.isfile(results_tab):
