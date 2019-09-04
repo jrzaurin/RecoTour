@@ -92,7 +92,7 @@ if __name__ == '__main__':
 	df1 = dfm[['user', 'item']]
 	interactions_df = tolist(df1)
 
-	# 80-20 train/test split
+	# train/test split
 	print("Train/Test split (and save)...")
 	interactions_l = [train_test_split(r['user'], r['item']) for i,r in interactions_df.iterrows()]
 	train = [interactions_l[i][0] for i in range(len(interactions_l))]
@@ -101,8 +101,8 @@ if __name__ == '__main__':
 	test_fname = DATA_PATH/'test.txt'
 
 	if args.valid:
-		# 90-10 train/valid split
-		tr_interactions_l = [train_test_split(t[0], t[1:], p=0.9) for t in train]
+		# train/valid split
+		tr_interactions_l = [train_test_split(t[0], t[1:], p=0.8) for t in train]
 		train = [tr_interactions_l[i][0] for i in range(len(tr_interactions_l))]
 		valid = [tr_interactions_l[i][1] for i in range(len(tr_interactions_l))]
 		valid_fname = DATA_PATH/'valid.txt'

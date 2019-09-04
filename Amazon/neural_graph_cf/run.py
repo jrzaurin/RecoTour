@@ -9,7 +9,7 @@ import multiprocessing
 from time import time
 from collections import defaultdict
 from multiprocessing import Pool
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import CyclicLR, ReduceLROnPlateau
 
 from utils.load_data import Data
 from utils.metrics import ranklist_by_heapq, get_performance
@@ -19,6 +19,7 @@ from ngcf import NGCF, BPR
 
 cores = multiprocessing.cpu_count()
 use_cuda = torch.cuda.is_available()
+
 
 def early_stopping(log_value, best_value, stopping_step, patience, expected_order='asc'):
     """
@@ -51,9 +52,9 @@ def train(model, data_generator, optimizer, scheduler):
         loss = model(u,i,j)
         loss.backward()
         optimizer.step()
-        if scheduler:
-            scheduler.step()
         running_loss += loss.item()
+        if isinstance(scheduler, CyclicLR):
+            scheduler.step()
     return running_loss
 
 
@@ -122,9 +123,9 @@ def test_CPU(model, users_to_test):
     return result
 
 
-def split_mtx(X, n_folds=10):
+def split_mtx(X, n_folds=100):
     """
-    Split a matrix/Tensor into n_folds
+    Split a matrix/Tensor into n_folds (for the user embeddings and the R matrices)
     """
     X_folds = []
     fold_len = X.shape[0]//n_folds
@@ -231,9 +232,11 @@ if __name__ == '__main__':
 
     layers = eval(args.layers)
     emb_dim = args.emb_dim
+    lr = args.lr
     reg = args.reg
     mess_dropout = [args.mess_dropout]*len(layers)
     node_dropout = args.node_dropout
+    # n_folds for the adjacency matrix
     n_fold = args.n_fold
     adj_type = args.adj_type
 
@@ -251,12 +254,15 @@ if __name__ == '__main__':
     else:
         adj_mtx = mean_adj + sp.eye(mean_adj.shape[0])
 
-    modelfname =  "NeuGCF" + \
+    modelfname =  args.model + \
+        "_adj_" + args.adj_type + \
+        "_opt_" + args.optimizer + \
         "_nemb_" + str(emb_dim) + \
         "_layers_" + re.sub(" ", "", str(layers)) + \
-        "_nodedr_" + str(node_dropout) + \
-        "_messdr_" + re.sub(" ", "", str(mess_dropout)) + \
-        "_reg_" + str(reg) + \
+        "_messdr_" + str(args.mess_dropout).split(".")[1] + \
+        "_reg_" + str(reg).split(".")[1] + \
+        "_lr_"  + str(args.lr).split(".")[1] + \
+        "_lrs_" + str(args.lr_scheduler) + \
         ".pt"
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
@@ -303,15 +309,23 @@ if __name__ == '__main__':
     else:
         cur_best_metric = 0.
 
-    if args.optimizer == 'adam':
+    if args.optimizer.lower() == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    elif args.optimizer == 'adamw':
+    elif args.optimizer.lower() == 'adamw':
         optimizer = AdamW(model.parameters(), lr=args.lr)
-    elif args.optimizer == 'radam':
+    elif args.optimizer.lower() == 'radam':
         optimizer = RAdam(model.parameters(), lr=args.lr)
 
-    if args.lr_scheduler:
-        scheduler = StepLR(optimizer, step_size=args.n_epochs//4, gamma=0.5)
+    training_steps = (data_generator.n_train//batch_size)+1
+    step_size = training_steps*(args.n_epochs//4) # 2 cycles
+    if args.lr_scheduler.lower() == 'reducelronplateau':
+        # this will be run within evaluation. Given that we evaluate every
+        # "eval_every" epochs (normally 5), if recall does not improve with
+        # respect to the previous one -> decrease lr (i.e. patience=1)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', patience=1)
+    elif args.lr_scheduler.lower() == 'cycliclr':
+        scheduler = CyclicLR(optimizer, step_size_up=step_size, base_lr=lr/10., max_lr=lr*3,
+            cycle_momentum=False)
     else:
         scheduler = None
 
@@ -353,12 +367,17 @@ if __name__ == '__main__':
             cur_best_metric, stopping_step, should_stop = \
             early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
 
+            # if log_value does not increase with respect to the previous validation,
+            # decrease lr
+            if isinstance(scheduler, ReduceLROnPlateau):
+                scheduler.step(log_value)
+
         if should_stop == True: break
 
         if (stopping_step == 0) & (args.save_results):
             torch.save(model.state_dict(), model_weights)
             try:
-                final_loss, final_res = loss, res
+                current_epoch, final_loss, final_res = epoch, loss, res
             except NameError:
                 pass
 
@@ -368,15 +387,15 @@ if __name__ == '__main__':
             for i,k in enumerate(Ks):
                 cols.append(m+'@'+str(k))
                 vals.append(final_res[m][i].cpu().numpy())
-        cols = ['modelname', 'loss'] + cols
-        vals = [modelfname, final_loss] + vals
+        cols = ['modelname', 'loss', 'epoch'] + cols
+        vals = [modelfname, final_loss, current_epoch] + vals
         if not os.path.isfile(results_tab):
             results_df = pd.DataFrame(columns=cols)
             experiment_df = pd.DataFrame(data=[vals], columns=cols)
-            results_df = results_df.append(experiment_df, ignore_index=True)
+            results_df = results_df.append(experiment_df, ignore_index=True, sort=False)
             results_df.to_csv(results_tab, index=False)
         else:
             results_df = pd.read_csv(results_tab)
             experiment_df = pd.DataFrame(data=[vals], columns=cols)
-            results_df = results_df.append(experiment_df, ignore_index=True)
+            results_df = results_df.append(experiment_df, ignore_index=True, sort=False)
             results_df.to_csv(results_tab, index=False)
