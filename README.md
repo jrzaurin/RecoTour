@@ -35,9 +35,9 @@ This is what you will find in the notebooks:
 4. kNN Collaborative Filtering recommendations
 5. GBM based recommendations using `lightGBM` with a tutorial on how to optimize gbms
 6. Non-Negative Matrix Factorization recommendations
-7. Factorization Machines recommendations using `xlearn`
-8. Field Aware Factorization Machines recommendations using `xlearn`
-9. Deep Learning based recommendations (Wide and Deep) using `pytorch`
+7. Factorization Machines (Steffen Rendle 2010) recommendations using `xlearn`
+8. Field Aware Factorization Machines (Yuchin Juan, et al, 2016) recommendations using `xlearn`
+9. Deep Learning based recommendations (Wide and Deep, Heng-Tze Cheng, et al, 2016) using `pytorch`
 
 I have included a more modular (nicer looking) version of a possible final
 solution (described in `Chapter16_final_solution_Recommendations.ipynb`) in
