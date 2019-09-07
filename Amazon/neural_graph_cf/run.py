@@ -254,7 +254,7 @@ if __name__ == '__main__':
     else:
         adj_mtx = mean_adj + sp.eye(mean_adj.shape[0])
 
-    modelfname =  args.model + \
+    modelfname =  args.model.lower() + \
         "_adj_" + args.adj_type + \
         "_opt_" + args.optimizer + \
         "_nemb_" + str(emb_dim) + \
@@ -269,10 +269,10 @@ if __name__ == '__main__':
     model_weights = os.path.join(args.results_dir, modelfname)
     results_tab = os.path.join(args.results_dir, 'results_df.csv')
 
-    if args.model == 'ngcf':
+    if args.model.lower() == 'ngcf':
         model = NGCF(data_generator.n_users, data_generator.n_items, emb_dim, layers, reg,
             node_dropout, mess_dropout, adj_mtx, n_fold)
-    elif args.model == 'bpr':
+    elif args.model.lower() == 'bpr':
         model = BPR(data_generator.n_users, data_generator.n_items, emb_dim, reg)
 
     if use_cuda:
@@ -320,9 +320,9 @@ if __name__ == '__main__':
     step_size = training_steps*(args.n_epochs//4) # 2 cycles
     if args.lr_scheduler.lower() == 'reducelronplateau':
         # this will be run within evaluation. Given that we evaluate every
-        # "eval_every" epochs (normally 5), if recall does not improve with
-        # respect to the previous one -> decrease lr (i.e. patience=1)
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', patience=1)
+        # "eval_every" epochs (normally 5), the patience of the scheduler
+        # should consider that. For example: patience=2 -> 2*5 = 10 epochs
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', patience=2)
     elif args.lr_scheduler.lower() == 'cycliclr':
         scheduler = CyclicLR(optimizer, step_size_up=step_size, base_lr=lr/10., max_lr=lr*3,
             cycle_momentum=False)
@@ -367,8 +367,6 @@ if __name__ == '__main__':
             cur_best_metric, stopping_step, should_stop = \
             early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
 
-            # if log_value does not increase with respect to the previous validation,
-            # decrease lr
             if isinstance(scheduler, ReduceLROnPlateau):
                 scheduler.step(log_value)
 
