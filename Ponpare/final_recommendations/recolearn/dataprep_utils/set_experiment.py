@@ -80,20 +80,20 @@ def save_dset(df, df_name, date_column, present, test_period, output_dir, is_val
 	tmp_train = (fdf[fdf['dset'] == 2]
 		.drop('dset', axis=1)
 		.reset_index(drop=True))
-	tmp_train.to_pickle(open(train_path, 'wb'))
+	tmp_train.to_pickle(train_path)
 
 	# test
 	tmp_test  = (fdf[fdf['dset'] == 0]
 		.drop('dset', axis=1)
 		.reset_index(drop=True))
-	tmp_test.to_pickle(open(test_path, 'wb'))
+	tmp_test.to_pickle(test_path)
 
 	# validation
 	if is_validation:
 		tmp_valid = (fdf[fdf['dset'] == 1]
 			.drop('dset', axis=1)
 			.reset_index(drop=True))
-		tmp_valid.to_pickle(open(valid_path, 'wb'))
+		tmp_valid.to_pickle(valid_path)
 
 
 def flag_dset(df, date_column, present, test_period, is_validation):
