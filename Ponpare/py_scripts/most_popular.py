@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
+import pickle
 import os
 
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import MinMaxScaler
 from recutils.average_precision import mapk
 
-inp_dir = "../../datasets/Ponpare/data_processed/"
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -37,6 +38,7 @@ df_popularity = df_n_purchases.merge(df_n_visits, on='coupon_id_hash', how='left
 df_popularity.fillna(0, inplace=True)
 df_popularity['popularity'] = df_popularity['counts_x'] + 0.1*df_popularity['counts_y']
 df_popularity.sort_values('popularity', ascending=False , inplace=True)
+df_popularity.reset_index(inplace=True, drop=True)
 
 # Because none of the validation coupons have been seen during training we
 # need to find a "proxy" for popularity. Here again one has freedom. Here we
@@ -85,6 +87,7 @@ coupons_valid_feat_num_norm = scaler.transform(coupons_valid_feat_num)
 df_top_10_feat = np.hstack([df_top_10_feat_num_norm, df_top_10_feat_oh])
 coupons_valid_feat = np.hstack([coupons_valid_feat_num_norm, coupons_valid_feat_oh])
 
+# Combination of euclidean and jaccard
 euc_dist = pairwise_distances(coupons_valid_feat_num_norm, df_top_10_feat_num_norm, metric='euclidean')
 jacc_dist = pairwise_distances(coupons_valid_feat_oh, df_top_10_feat_oh, metric='jaccard')
 
@@ -93,6 +96,9 @@ for i,(e,j) in enumerate(zip(euc_dist, jacc_dist)):
 	l1,r1,l2,r2 = np.min(e), np.max(e), np.min(j), np.max(j)
 	euc_dist_interp[i,:] = np.interp(e, [l1,r1], [l2,r2])
 dist_mtx = (jacc_dist + euc_dist_interp)/2.
+
+# # or simply cosine
+# dist_mtx = pairwise_distances(coupons_valid_feat, df_top_10_feat, metric='cosine')
 
 mean_distances = np.apply_along_axis(np.mean, 1, dist_mtx)
 df_valid_popularity = pd.DataFrame({'coupon_id_hash': coupons_valid_ids,
@@ -123,7 +129,8 @@ for user, coupons in tmp_valid_dict.items():
 		keep_users.append(user)
 # out of 6924, we end up with 6071, so not bad
 interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
-pickle.dump(interactions_valid_dict, open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "wb"))
+fname = inp_dir
+pickle.dump(interactions_valid_dict, open(inp_dir+"valid/interactions_valid_dict.p", "wb"))
 
 # Take the 358 validation coupons and the 7057 users in total
 left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})

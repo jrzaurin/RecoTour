@@ -323,7 +323,7 @@ def user_features(inp_dir, out_dir):
 
 	# note that the "train" is redundant here. Unlike coupons, there will not be
 	# user_feat_test in this excercise.
-	df_user_feat.to_pickle(os.path.join(out_dir,"train","df_user_train_feat.p"))
+	df_user_feat.to_pickle(os.path.join(out_dir,"train","df_users_train_feat.p"))
 
 	# save dictionary
 	pickle.dump(dict_of_mappings, open(os.path.join(out_dir, 'dict_of_mappings.p'), 'wb') )
