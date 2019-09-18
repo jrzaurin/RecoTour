@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import MinMaxScaler
 from recutils.average_precision import mapk
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "~/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 

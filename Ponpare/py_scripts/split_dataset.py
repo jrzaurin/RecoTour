@@ -1,3 +1,14 @@
+'''
+Direct copy of:
+final_recommendations/recolearn/dataprep_utils/set_experiment.py
+
+renamed to split_dataset.py for consistency with the notebooks, since the code
+in final_recommendations is meant to be more of a production oriented code
+
+to run simply:
+python split_dataset.py
+'''
+
 import numpy as np
 import pandas as pd
 import argparse

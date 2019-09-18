@@ -1,3 +1,11 @@
+'''
+Direct copy of the code in:
+final_recommendations/recolearn/dataprep_utils/translate.py
+
+to run simply:
+python translate.py
+'''
+
 import os
 import pandas as pd
 import argparse
@@ -9,8 +17,8 @@ def translate(input_dir, output_dir, documentation_dir, translate_fname, prefect
 	we are trying to solve.
 	"""
 
-	if not os.path.exists(directory):
-		os.makedirs(directory)
+	if not os.path.exists(output_dir):
+		os.makedirs(output_dir)
 
 	translate_df = pd.read_excel(os.path.join(documentation_dir,translate_fname) ,skiprows=5)
 

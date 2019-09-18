@@ -158,8 +158,15 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="build the features for the coupons")
 
-	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_processed")
-	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_processed")
+	parser.add_argument(
+		"--root_data_dir",
+		type=str, default="/home/ubuntu/projects/RecoTour/datasets/Ponpare/",)
+	args = parser.parse_args()
+
+	parser.add_argument("--input_dir",
+		type=str, default=args.root_data_dir+"data_processed")
+	parser.add_argument("--output_dir",
+		type=str, default=args.root_data_dir+"data_processed")
 	args = parser.parse_args()
 
 	coupon_features(args.input_dir, args.output_dir)
