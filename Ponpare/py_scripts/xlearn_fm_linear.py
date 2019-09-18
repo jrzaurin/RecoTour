@@ -1,18 +1,131 @@
 import numpy as np
 import pandas as pd
 import random
-import gc
 import os
+import gc
 import xlearn as xl
 import pickle
 
-from recutils.average_precision import mapk
+from time import time
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
 from scipy.sparse import csr_matrix, save_npz
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import mean_squared_error
 from hyperopt import hp, tpe
 from hyperopt.fmin import fmin
+from recutils.average_precision import mapk
+
+inp_dir = "../../datasets/Ponpare/data_processed/"
+train_dir = "train"
+valid_dir = "valid"
+
+# COUPONS
+# train coupon features (with coupons we will focus on categorical features only)
+df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coupons_train_feat.p'))
+drop_cols = [c for c in df_coupons_train_feat.columns
+    if (('_cat' not in c) or ('method2' in c)) and (c!='coupon_id_hash')]
+
+df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
+coupons_cols_to_oh = [c for c in df_coupons_train_cat_feat.columns if (c!='coupon_id_hash')]
+
+# We are going to use FMs (and linear models) with xlearn. Here there is no
+# "automatic" treatment of categorical features. Therefore, we need to one-hot
+# encode them. To one hot encode we need to do it all at once, validation and
+# training coupons
+
+# Read the validation coupon features
+df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupons_valid_feat.p'))
+df_coupons_valid_cat_feat = df_coupons_valid_feat.drop(drop_cols, axis=1)
+
+df_coupons_train_cat_feat['is_valid'] = 0
+df_coupons_valid_cat_feat['is_valid'] = 1
+
+df_all_coupons = (df_coupons_train_cat_feat
+    .append(df_coupons_valid_cat_feat, ignore_index=True))
+
+df_all_coupons_oh_feat = pd.get_dummies(df_all_coupons, columns=coupons_cols_to_oh)
+df_coupons_train_oh_feat = (df_all_coupons_oh_feat[df_all_coupons_oh_feat.is_valid==0]
+    .drop('is_valid', axis=1))
+df_coupons_valid_oh_feat = (df_all_coupons_oh_feat[df_all_coupons_oh_feat.is_valid==1]
+    .drop('is_valid', axis=1))
+
+# USERS
+# train user-features: there are a lot of features for users, both, numerical
+# and categorical. We keep them all
+df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_users_train_feat.p'))
+
+# Normalizing the numerical columns
+user_categorical_cols = [c for c in df_users_train_feat.columns if c.endswith('_cat')]
+user_numerical_cols = [c for c in df_users_train_feat.columns
+    if ((c not in user_categorical_cols) and (c!='user_id_hash'))]
+user_numerical_df = df_users_train_feat[user_numerical_cols]
+
+# I know I could use MinMaxScaler(), but it returns a np array. I would have to transform the
+# object into a pandas df and add column names. Is really easier, but the line below is easier
+user_numerical_df_norm = (user_numerical_df-user_numerical_df.min())/(user_numerical_df.max()-user_numerical_df.min())
+df_users_train_feat.drop(user_numerical_cols, axis=1, inplace=True)
+df_users_train_feat = pd.concat([user_numerical_df_norm, df_users_train_feat], axis=1)
+df_users_train_oh_feat = pd.get_dummies(df_users_train_feat, columns=user_categorical_cols)
+df_users_train_oh_feat.shape
+
+# INTEREST
+# Load interest dataframe
+df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
+df_train = pd.merge(df_interest, df_users_train_oh_feat, on='user_id_hash')
+df_train = pd.merge(df_train, df_coupons_train_oh_feat, on = 'coupon_id_hash')
+
+# drop unneccesary columns
+df_train.drop(['user_id_hash','coupon_id_hash','recency_factor'], axis=1, inplace=True)
+y_train = df_train.interest.values
+df_train.drop('interest', axis=1, inplace=True)
+
+# Due to a series of problems when using xlearn I initially decided to run my
+# own cv
+
+# 1-. I will take X% of the training data and split it in 3 folds
+    # the reason of subsampling is mostly due to computing time
+# 2-. Save them to disk in respective files
+# 3-. perform cv manually within an hyperopt function
+XLEARN_DIR = inp_dir + "xlearn_data"
+rnd_indx_cv = random.sample(range(df_train.shape[0]), round(df_train.shape[0]*0.25))
+X_train_cv = csr_matrix(df_train.iloc[rnd_indx_cv,:].values)
+y_train_cv =  y_train[rnd_indx_cv]
+seed = random.randint(1,100)
+kf = KFold(n_splits=3, shuffle=True, random_state=seed)
+train_fpaths, valid_fpaths, valid_target_fpaths = [],[],[]
+start = time()
+for i, (train_index, valid_index) in enumerate(kf.split(X_train_cv)):
+
+    print("INFO: iteration {} of {}".format(i+1,kf.n_splits))
+
+    x_tr, y_tr = X_train_cv[train_index], y_train_cv[train_index]
+    x_va, y_va = X_train_cv[valid_index], y_train_cv[valid_index]
+
+    train_fpath = os.path.join(XLEARN_DIR,'train_part_'+str(i)+".txt")
+    valid_fpath = os.path.join(XLEARN_DIR,'valid_part_'+str(i)+".txt")
+    valid_target_fpath = os.path.join(XLEARN_DIR,'target_part_'+str(i)+".txt")
+
+    print("INFO: saving svmlight training file to {}".format(train_fpath))
+    dump_svmlight_file(x_tr, y_tr, train_fpath)
+
+    print("INFO: saving svmlight validatio file to {}".format(valid_fpath))
+    dump_svmlight_file(x_va, y_va, valid_fpath)
+
+    print("INFO: saving y_valid to {}".format(valid_target_fpath))
+    np.savetxt(valid_target_fpath, y_va)
+
+    train_fpaths.append(train_fpath)
+    valid_fpaths.append(valid_fpath)
+    valid_target_fpaths.append(valid_target_fpath)
+print(time() - start)
+
+xl_parameter_space = {
+    'lr': hp.uniform('lr', 0.01, 0.5),
+    'lambda': hp.uniform('lambda', 0.001,0.01),
+    'init': hp.uniform('init', 0.2,0.8),
+    'epoch': hp.quniform('epoch', 10, 200, 10),
+    'k': hp.quniform('k', 2, 10, 1),
+}
 
 def xl_objective(params, method="fm"):
 
@@ -53,137 +166,45 @@ def xl_objective(params, method="fm"):
 
     return error
 
-inp_dir = "../datasets/Ponpare/data_processed/"
-train_dir = "train"
-valid_dir = "valid"
-
-# COUPONS
-# train coupon features
-df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_coupons_train_feat.p'))
-drop_cols = [c for c in df_coupons_train_feat.columns
-    if (('_cat' not in c) or ('method2' in c)) and (c!='coupon_id_hash')]
-df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
-coupons_cols_to_oh = [c for c in df_coupons_train_cat_feat.columns if (c!='coupon_id_hash')]
-
-# We are going to use FM (and linear) methods with xlearn. Since there no
-# "automatic" treatment of categorical features, we need to one-hot encode
-# them. The one-hot encoding process needs to be done all at once, validation
-# and training datasets
-
-# Read the validation coupon features
-df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupons_valid_feat.p'))
-df_coupons_valid_cat_feat = df_coupons_valid_feat.drop(drop_cols, axis=1)
-df_coupons_train_cat_feat['is_valid'] = 0
-df_coupons_valid_cat_feat['is_valid'] = 1
-df_all_coupons = (df_coupons_train_cat_feat
-    .append(df_coupons_valid_cat_feat, ignore_index=True))
-df_all_coupons_oh_feat = pd.get_dummies(df_all_coupons, columns=coupons_cols_to_oh)
-df_coupons_train_oh_feat = (df_all_coupons_oh_feat[df_all_coupons_oh_feat.is_valid==0]
-    .drop('is_valid', axis=1))
-df_coupons_valid_oh_feat = (df_all_coupons_oh_feat[df_all_coupons_oh_feat.is_valid==1]
-    .drop('is_valid', axis=1))
-
-# USERS
-df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_user_train_feat.p'))
-
-# Here a bit or preprocessing for the numerical features
-user_categorical_cols = [c for c in df_users_train_feat.columns if c.endswith('_cat')]
-user_numerical_cols = [c for c in df_users_train_feat.columns
-    if ((c not in user_categorical_cols) and (c!='user_id_hash'))]
-user_numerical_df = df_users_train_feat[user_numerical_cols]
-user_numerical_df_norm = (user_numerical_df-user_numerical_df.min())/(user_numerical_df.max()-user_numerical_df.min())
-df_users_train_feat.drop(user_numerical_cols, axis=1, inplace=True)
-df_users_train_feat = pd.concat([user_numerical_df_norm, df_users_train_feat], axis=1)
-df_users_train_oh_feat = pd.get_dummies(df_users_train_feat, columns=user_categorical_cols)
-
-# INTEREST
-df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
-df_train = pd.merge(df_interest, df_users_train_oh_feat, on='user_id_hash')
-df_train = pd.merge(df_train, df_coupons_train_oh_feat, on = 'coupon_id_hash')
-
-# drop unneccesary columns
-df_train.drop(['user_id_hash','coupon_id_hash','recency_factor'], axis=1, inplace=True)
-y_train = df_train.interest.values
-df_train.drop('interest', axis=1, inplace=True)
-
-# Due to a series of problems when using xlearn I initially decided to run my own cv
-
-# 1-. I will take X% of the training data and split it in 3 folds
-    # the reason of subsampling is mostly due to computing time
-# 2-. Save them to disk in respective files
-# 3-. perform cv manually within an hyperopt function
-XLEARN_DIR = inp_dir + "xlearn_data"
-rnd_indx_cv = random.sample(range(df_train.shape[0]), round(df_train.shape[0]*0.1))
-X_train_cv = csr_matrix(df_train.iloc[rnd_indx_cv,:].values)
-y_train_cv =  y_train[rnd_indx_cv]
-seed = random.randint(1,100)
-kf = KFold(n_splits=3, shuffle=True, random_state=seed)
-train_fpaths, valid_fpaths, valid_target_fpaths = [],[],[]
-for i, (train_index, valid_index) in enumerate(kf.split(X_train_cv)):
-
-    print("INFO: iteration {} of {}".format(i+1,kf.n_splits))
-
-    x_tr, y_tr = X_train_cv[train_index], y_train_cv[train_index]
-    x_va, y_va = X_train_cv[valid_index], y_train_cv[valid_index]
-
-    train_fpath = os.path.join(XLEARN_DIR,'train_part_'+str(i)+".txt")
-    valid_fpath = os.path.join(XLEARN_DIR,'valid_part_'+str(i)+".txt")
-    valid_target_fpath = os.path.join(XLEARN_DIR,'target_part_'+str(i)+".txt")
-
-    print("INFO: saving svmlight training file to {}".format(train_fpath))
-    dump_svmlight_file(x_tr, y_tr, train_fpath)
-
-    print("INFO: saving svmlight validatio file to {}".format(valid_fpath))
-    dump_svmlight_file(x_va, y_va, valid_fpath)
-
-    print("INFO: saving y_valid to {}".format(valid_target_fpath))
-    np.savetxt(valid_target_fpath, y_va)
-
-    train_fpaths.append(train_fpath)
-    valid_fpaths.append(valid_fpath)
-    valid_target_fpaths.append(valid_target_fpath)
-
-
-xl_parameter_space = {
-    'lr': hp.uniform('lr', 0.01, 0.5),
-    'lambda': hp.uniform('lambda', 0.001,0.01),
-    'init': hp.uniform('init', 0.2,0.8),
-    'epoch': hp.quniform('epoch', 10, 200, 10),
-    'k': hp.quniform('k', 2, 10, 1),
-}
-
-# liblinear fit
+# LINEAR
 partial_objective = lambda params: xl_objective(
     params,
     method="linear")
 xl_objective.i = 0
+start = time()
 best_linear = fmin(
     fn=partial_objective,
     space=xl_parameter_space,
     algo=tpe.suggest,
-    max_evals=10
+    max_evals=5
     )
+end = time()-start
+print("{} min".format(round(end/60,3)))
 pickle.dump(best_linear, open(os.path.join(XLEARN_DIR,'best_linear.p'), "wb"))
 
-# libfm fit
+# FM
 partial_objective = lambda params: xl_objective(
     params,
     method="fm")
 xl_objective.i = 0
+start = time()
 best_fm = fmin(
     fn=partial_objective,
     space=xl_parameter_space,
     algo=tpe.suggest,
-    max_evals=10
+    max_evals=5
     )
+end = time()-start
+print("{} min".format(round(end/60,3)))
 pickle.dump(best_fm, open(os.path.join(XLEARN_DIR,'best_fm.p'), "wb"))
 
+# CHECK RESULTS. SIMPLY TESTING THE PROCESS
 # Read validation interactions dataset
 interactions_valid_dict = pickle.load(
-    open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
+    open("../../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
 
 # Take the validation coupons and train users seen in training and during
-# validation and rank!
+# validation and rank
 left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
 left['key'] = 0
 right = df_coupons_valid_feat[['coupon_id_hash']]
@@ -222,12 +243,12 @@ best_param = {'task':'reg',
             'k':20}
 
 xl_model = xl.create_fm()
-xl_model.setTrain(train_fpath)
-xl_model.setTest(valid_fpath)
-xl_model.fit(best_param, xlmodel_fname_tmp)
-xl_model.predict(xlmodel_fname_tmp, xlpreds_fname_tmp)
+xl_model.setTrain(train_data_file)
+xl_model.setTest(valid_data_file)
+xl_model.fit(best_param, xlmodel_fname)
+xl_model.predict(xlmodel_fname, xlpreds_fname)
 
-preds = np.loadtxt(xlpreds_fname_tmp)
+preds = np.loadtxt(xlpreds_fname)
 df_preds = df_valid[['user_id_hash','coupon_id_hash']]
 df_preds['interest'] = preds
 
@@ -246,3 +267,4 @@ for k,_ in recomendations_dict.items():
     pred.append(list(recomendations_dict[k]))
 
 print(mapk(actual,pred))
+

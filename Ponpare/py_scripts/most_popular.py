@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import MinMaxScaler
 from recutils.average_precision import mapk
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "../../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -16,7 +16,7 @@ df_visits_train = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_visits_train
 df_visits_train.rename(index=str, columns={'view_coupon_id_hash': 'coupon_id_hash'}, inplace=True)
 
 # train users
-df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_train_feat.p'))
+df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_users_train_feat.p'))
 train_users = df_user_train_feat.user_id_hash.unique()
 
 # Compute popularity:
@@ -123,7 +123,7 @@ for user, coupons in tmp_valid_dict.items():
 		keep_users.append(user)
 # out of 6924, we end up with 6071, so not bad
 interactions_valid_dict = {k:v for k,v in tmp_valid_dict.items() if k in keep_users}
-
+pickle.dump(interactions_valid_dict, open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "wb"))
 
 # Take the 358 validation coupons and the 7057 users in total
 left = pd.DataFrame({'user_id_hash':list(interactions_valid_dict.keys())})
