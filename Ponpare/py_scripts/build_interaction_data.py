@@ -59,7 +59,7 @@ def build_interaction_df(inp_dir, out_dir, recency=False, mode=0):
 
 	# train users and coupons
 	df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_coupons_train_feat.p'))
-	df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_train_feat.p'))
+	df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_users_train_feat.p'))
 	train_users = df_user_train_feat.user_id_hash.unique()
 	train_coupons = df_coupons_train_feat.coupon_id_hash.unique()
 
@@ -169,7 +169,7 @@ def build_user_and_item_feat_mtx(inp_dir, out_dir):
 		raise FileNotFoundError("run build_interaction_mtx first")
 
 	df_coupons_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_coupons_train_feat.p'))
-	df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_user_train_feat.p'))
+	df_user_train_feat = pd.read_pickle(os.path.join(inp_dir, 'train', 'df_users_train_feat.p'))
 
 	df_coupons_train_feat =  df_coupons_train_feat[df_coupons_train_feat.coupon_id_hash.isin(items_idx_dict.keys())]
 	df_user_train_feat = df_user_train_feat[df_user_train_feat.user_id_hash.isin(users_idx_dict.keys())]
@@ -206,9 +206,15 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser(description="build interaction datasets")
 
-	parser.add_argument("--input_dir", type=str, default="../datasets/Ponpare/data_processed")
-	parser.add_argument("--output_dir", type=str, default="../datasets/Ponpare/data_processed")
+	parser.add_argument(
+		"--root_data_dir",
+		type=str, default="/home/ubuntu/projects/RecoTour/datasets/Ponpare/",)
+	args = parser.parse_args()
 
+	parser.add_argument("--input_dir",
+		type=str, default=args.root_data_dir+"data_processed")
+	parser.add_argument("--output_dir",
+		type=str, default=args.root_data_dir+"data_processed")
 	args = parser.parse_args()
 
 	build_interaction_df(args.input_dir, args.output_dir)
