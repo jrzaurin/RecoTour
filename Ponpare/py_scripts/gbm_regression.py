@@ -1,21 +1,25 @@
+'''
+There is more code in the corresponding notebook. This trully is an experimentation script
+'''
 import numpy as np
 import pandas as pd
 import pickle
 import random
 import os
-import xgboost as xgb
+# import xgboost as xgb
 import lightgbm as lgb
 import catboost as ctb
 import warnings
 import multiprocessing
 
-from joblib import Parallel, delayed
 from recutils.average_precision import mapk
 from functools import reduce
 from hyperopt import hp, tpe, fmin, Trials
+from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.experimental import enable_hist_gradient_boosting
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 warnings.filterwarnings("ignore")
-cores = multiprocessing.cpu_count()
 
 
 def lgb_objective(params):
@@ -101,7 +105,8 @@ def lgb_objective_map(params):
 
 	return 1-result
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -113,7 +118,7 @@ drop_cols = [c for c in df_coupons_train_feat.columns
 df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
 
 # train user features
-df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_user_train_feat.p'))
+df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_users_train_feat.p'))
 
 # interest dataframe
 df_interest = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_interest.p'))
@@ -142,8 +147,7 @@ df_coupons_valid_feat = pd.read_pickle(os.path.join(inp_dir, 'valid', 'df_coupon
 df_coupons_valid_cat_feat = df_coupons_valid_feat.drop(drop_cols, axis=1)
 
 # Read the interactions during validation
-interactions_valid_dict = pickle.load(
-    open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
+interactions_valid_dict = pickle.load(open(inp_dir+"/valid/interactions_valid_dict.p", "rb"))
 
 # Build a validation dataframe with the cartesian product between the 358 validation coupons
 # and the 6071 users seen in training AND validation
@@ -172,23 +176,6 @@ lgb_parameter_space = {
     'reg_lambda': hp.uniform('reg_lambda', 0.01, 1.),
 }
 
-# -----------------------------------------------------------------------------
-# METHOD1: optimize against rmse
-early_stop_dict = {}
-trials = Trials()
-lgb_objective.i = 0
-best = fmin(fn=lgb_objective,
-            space=lgb_parameter_space,
-            algo=tpe.suggest,
-            max_evals=10,
-            trials=trials)
-best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
-best['num_leaves'] = int(best['num_leaves'])
-best['verbose'] = -1
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# METHOD2: optimize against MAP
 early_stop_dict = {}
 trials = Trials()
 lgb_objective_map.i = 0
@@ -201,9 +188,7 @@ best['num_boost_round'] = early_stop_dict[trials.best_trial['tid']]
 best['num_leaves'] = int(best['num_leaves'])
 best['verbose'] = -1
 print(1-trials.best_trial['result']['loss'])
-# -----------------------------------------------------------------------------
 
-# fit model
 model = lgb.LGBMRegressor(**best)
 model.fit(train,y_train,feature_name=all_cols,categorical_feature=cat_cols)
 # save model
@@ -230,38 +215,55 @@ for k,_ in recomendations_dict.items():
 print(mapk(actual,pred))
 
 # -----------------------------------------------------------------------------
-# MODEL INTERPRETABILITY
+# MODEL INTERPRETABILITY (see corresponding notebook)
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-import lime
-import shap
+# -----------------------------------------------------------------------------
+# EXPERIMENTING WITH SKLEARN'S LIGHTGBM EQUIVALENT
+def hgb_objective_map(params):
+	"""
+	objective function for HistGradientBoostingRegressor.
+	"""
 
-from eli5.sklearn import PermutationImportance
-from eli5 import explain_weights_df,explain_prediction_df
-from lime.lime_tabular import LimeTabularExplainer
+	# hyperopt casts as float
+	params['max_iter'] = int(params['max_iter'])
+	params['max_leaf_nodes'] = int(params['max_leaf_nodes'])
 
-# eli5
-feat_imp_df = explain_weights_df(model, feature_names=all_cols)
-feat_imp_df.head(10)
+	model = HistGradientBoostingRegressor(**params)
+	model.fit(train,y_train)
+	preds = model.predict(X_valid)
 
-X_train = train.values
-exp_pred_df = explain_prediction_df(estimator=model, doc=X_train[0], feature_names=all_cols)
+	df_eval['interest'] = preds
+	df_ranked = df_eval.sort_values(['user_id_hash', 'interest'], ascending=[False, False])
+	df_ranked = (df_ranked
+		.groupby('user_id_hash')['coupon_id_hash']
+		.apply(list)
+		.reset_index())
+	recomendations_dict = pd.Series(df_ranked.coupon_id_hash.values,
+		index=df_ranked.user_id_hash).to_dict()
 
-# lime
-explainer = LimeTabularExplainer(X_train, mode='regression',
-                                 feature_names=all_cols,
-                                 categorical_features=cat_cols,
-                                 random_state=1981,
-                                 discretize_continuous=True)
-exp = explainer.explain_instance(X_valid[10],
-                                 model.predict, num_features=20)
+	actual = []
+	pred = []
+	for k,_ in recomendations_dict.items():
+		actual.append(list(interactions_valid_dict[k]))
+		pred.append(list(recomendations_dict[k]))
 
-# Shap
-X_valid_rn = X_valid[random.sample(range(X_valid.shape[0]),10000)]
-shap_explainer = shap.TreeExplainer(model)
-valid_shap_vals = shap_explainer.shap_values(X_valid_rn)
-shap.force_plot(valid_shap_vals[0, :], feature_names=all_cols)
-shap.force_plot(valid_shap_vals, feature_names=all_cols)
-shap.summary_plot(valid_shap_vals, feature_names=all_cols, auto_size_plot=False)
-shap.dependence_plot('discount_price_mean', valid_shap_vals, feature_names=all_cols,dot_size=100)
+	result = mapk(actual,pred)
+	print("INFO: iteration {} MAP {:.3f}".format(lgb_objective_map.i, result))
+
+	hgb_objective_map.i+=1
+
+	return 1-result
+
+# defining the parameter space
+hgb_parameter_space = {
+	'learning_rate': hp.uniform('learning_rate', 0.01, 0.5),
+	'max_iter': hp.quniform('max_iter', 50, 500, 50),
+	'max_leaf_nodes': hp.quniform('max_leaf_nodes', 30,1024,5),
+    'l2_regularization': hp.uniform('l2_regularization', 0.01, 1.)
+}
+
+hgb_objective_map.i = 0
+best = fmin(fn=hgb_objective_map,
+            space=hgb_parameter_space,
+            algo=tpe.suggest,
+            max_evals=10)
