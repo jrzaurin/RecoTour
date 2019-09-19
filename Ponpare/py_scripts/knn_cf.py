@@ -9,11 +9,12 @@ from scipy.sparse import csr_matrix, load_npz
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 from recutils.average_precision import mapk
+from multiprocessing import Pool
 
 import multiprocessing
 from joblib import Parallel, delayed
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "../../datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 # train and validation coupons
@@ -132,8 +133,15 @@ def build_recommendations(user):
 	return (user,ranked_cp_idxs_valid)
 
 start = time()
+
 cores = multiprocessing.cpu_count()
-recommend_coupons = Parallel(n_jobs=cores)(delayed(build_recommendations)(user) for user,_ in user_items_tuple)
+
+pool = Pool(cores)
+all_users = list(interactions_valid_dict.keys())
+recommend_coupons = pool.map(build_recommendations, all_users)
+
+# recommend_coupons = Parallel(cores)(delayed(build_recommendations)(user) for user,_ in user_items_tuple)
+
 print(time()-start)
 
 recommendations_dict = {k:v for k,v in recommend_coupons}
