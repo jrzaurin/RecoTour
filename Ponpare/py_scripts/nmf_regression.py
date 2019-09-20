@@ -10,7 +10,6 @@ from time import time
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.decomposition import NMF
 from sklearn.model_selection import train_test_split
-from sklearn.externals import joblib
 from scipy.sparse import csr_matrix, load_npz
 from recutils.average_precision import mapk
 from hyperopt import hp, tpe, fmin, Trials
@@ -18,7 +17,7 @@ from hyperopt import hp, tpe, fmin, Trials
 warnings.filterwarnings("ignore")
 cores = multiprocessing.cpu_count()
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -68,11 +67,10 @@ interactions_mtx = load_npz(os.path.join(inp_dir, train_dir, "interactions_mtx.n
 items_idx_dict = pickle.load(open(os.path.join(inp_dir, train_dir, "items_idx_dict.p"),'rb'))
 users_idx_dict = pickle.load(open(os.path.join(inp_dir, train_dir, "users_idx_dict.p"),'rb'))
 
-ncomp = 100
+ncomp = 50
 nmf_model = NMF(n_components=ncomp, init='random', random_state=1981)
 user_factors = nmf_model.fit_transform(interactions_mtx)
 item_factors = nmf_model.components_.T
-joblib.dump(nmf_model, "../datasets/Ponpare/data_processed/models/nmf_model.p")
 
 # make sure every user/item points to the right factors
 user_factors_dict = {}
@@ -100,7 +98,7 @@ y = df_train.interest.values
 
 # VALIDATION
 interactions_valid_dict = pickle.load(
-	open("../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p","rb"))
+	open(inp_dir+"valid/interactions_valid_dict.p","rb"))
 # remember that one user that visited one coupon and that coupon is not in the training set of coupons.
 # and in consequence not in the interactions matrix
 interactions_valid_dict.pop("25e2b645bfcd0980b2a5d0a4833f237a")
@@ -147,6 +145,8 @@ for k,_ in recomendations_dict.items():
 
 print(mapk(actual,pred))
 
+
+# WITH OPTIMIZATION (see the notebook)
 # def lgb_objective_map(params):
 # 	"""
 # 	objective function for lightgbm.
