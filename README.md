@@ -24,9 +24,6 @@ code is, of course, "notebook-oriented". The notebooks have plenty of
 explanations and references to relevant papers or packages. My intention was
 to focus on the code, but you will also find some math.
 
-All the code in the notebooks has run on a **c5.4xlarge** instance or a
-**p2.xlarge** instance when running deep learning algorithms.
-
 This is what you will find in the notebooks:
 
 ## Ponpare
