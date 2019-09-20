@@ -15,7 +15,7 @@ from hyperopt import hp, tpe
 from hyperopt.fmin import fmin
 from recutils.average_precision import mapk
 
-inp_dir = "../../datasets/Ponpare/data_processed/"
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -87,6 +87,8 @@ df_train.drop('interest', axis=1, inplace=True)
 # 2-. Save them to disk in respective files
 # 3-. perform cv manually within an hyperopt function
 XLEARN_DIR = inp_dir + "xlearn_data"
+if not os.path.exists(XLEARN_DIR):
+    os.makedirs(XLEARN_DIR)
 rnd_indx_cv = random.sample(range(df_train.shape[0]), round(df_train.shape[0]*0.25))
 X_train_cv = csr_matrix(df_train.iloc[rnd_indx_cv,:].values)
 y_train_cv =  y_train[rnd_indx_cv]
@@ -176,7 +178,7 @@ best_linear = fmin(
     fn=partial_objective,
     space=xl_parameter_space,
     algo=tpe.suggest,
-    max_evals=5
+    max_evals=10
     )
 end = time()-start
 print("{} min".format(round(end/60,3)))
@@ -198,10 +200,10 @@ end = time()-start
 print("{} min".format(round(end/60,3)))
 pickle.dump(best_fm, open(os.path.join(XLEARN_DIR,'best_fm.p'), "wb"))
 
-# CHECK RESULTS. SIMPLY TESTING THE PROCESS
+# CHECK RESULTS. SIMPLY TESTING THE PROCESS (See notebook for more details)
 # Read validation interactions dataset
 interactions_valid_dict = pickle.load(
-    open("../../datasets/Ponpare/data_processed/valid/interactions_valid_dict.p", "rb"))
+    open(inp_dir+"valid/interactions_valid_dict.p", "rb"))
 
 # Take the validation coupons and train users seen in training and during
 # validation and rank
