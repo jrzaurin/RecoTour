@@ -1,3 +1,9 @@
+'''
+This is a failed attempt to try to make lightgbm work with the ranking method.
+
+For me it was useful, but for most part can be ignored.
+'''
+
 import numpy as np
 import pandas as pd
 import os
@@ -16,7 +22,7 @@ from recutils.average_precision import mapk
 warnings.filterwarnings("ignore")
 cores = multiprocessing.cpu_count()
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
