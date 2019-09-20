@@ -12,7 +12,7 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
 from hyperopt import hp, tpe, fmin, Trials
 
-inp_dir = "../datasets/Ponpare/data_processed/"
+inp_dir = "/home/ubuntu/projects/RecoTour/datasets/Ponpare/data_processed/"
 train_dir = "train"
 valid_dir = "valid"
 
@@ -24,7 +24,7 @@ df_coupons_train_cat_feat = df_coupons_train_feat.drop(drop_cols, axis=1)
 coupon_categorical_cols = [c for c in df_coupons_train_cat_feat.columns if c!="coupon_id_hash"]
 
 # USERS
-df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_user_train_feat.p'))
+df_users_train_feat = pd.read_pickle(os.path.join(inp_dir, train_dir, 'df_users_train_feat.p'))
 user_categorical_cols = [c for c in df_users_train_feat.columns if c.endswith('_cat')]
 user_numerical_cols = [c for c in df_users_train_feat.columns
     if ((c not in user_categorical_cols) and (c!='user_id_hash'))]
