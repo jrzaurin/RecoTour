@@ -1,3 +1,8 @@
+
+<p align="center">
+  <img width="450" height="300" src="docs/figures/recotour_logo.png">
+</p>
+
 # RecoTour
 
 This repo intends to be a tour through some recommendation algorithms in
