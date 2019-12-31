@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img width="450" height="300" src="docs/figures/recotour_logo.png">
+  <img width="450" src="docs/figures/recotour_logo.png">
 </p>
 
 # RecoTour
