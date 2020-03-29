@@ -59,14 +59,17 @@ def parse_args():
     parser.add_argument(
         "--lr_patience",
         type=int,
-        default=3,
+        default=5,
         help="Patience for ReduceLROnPlateau lr_scheduler before decreasing lr",
     )
     parser.add_argument(
         "--eval_every", type=int, default=1, help="Evaluate every N epochs"
     )
     parser.add_argument(
-        "--early_stop_patience", type=int, default=2, help="Patience for early stopping"
+        "--early_stop_patience",
+        type=int,
+        default=10,
+        help="Patience for early stopping",
     )
     parser.add_argument(
         "--early_stop_score_fn", type=str, default="loss", help="{loss, metric}"
