@@ -1,0 +1,34 @@
+#python
+build/
+dist/
+__pycache__*
+*.pyc
+*.pyo
+*.egg-info
+*.mypy_cache
+
+# jupyter / ipython
+.ipynb_checkpoints
+
+# data related dirs
+datasets/
+data/
+Data/
+model_weights/
+weights/
+*.csv
+
+# tests
+.coverage
+.pytest_cache
+
+# sublime
+*.sublime-workspace
+sftp*-config.json
+sftp*-config_cpu.json
+
+# misc
+.DS_store
+
+#mypy
+.mypy_cache
