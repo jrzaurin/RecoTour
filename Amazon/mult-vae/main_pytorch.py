@@ -20,9 +20,9 @@ device = torch.device("cuda" if use_cuda else "cpu")
 
 def init_weights(model):
     for name, param in model.named_parameters():
-        if 'weight' in name:
+        if "weight" in name:
             nn.init.xavier_uniform_(param.data)
-        elif 'bias' in name:
+        elif "bias" in name:
             param.data.normal_(std=0.001)
 
 

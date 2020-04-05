@@ -13,8 +13,8 @@ class DAEEncoder(nn.Module):
 
         self.q_layers = nn.Sequential()
         for i, (p, inp, out) in enumerate(zip(dropout, q_dims[:-1], q_dims[1:])):
-            self.q_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
-            self.q_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
+            self.q_layers.add_module("_".join(["dropout", str(i)]), nn.Dropout(p))
+            self.q_layers.add_module("_".join(["linear", str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = F.normalize(X, p=2, dim=1)
@@ -31,8 +31,8 @@ class VAEEncoder(nn.Module):
         q_dims_ = self.q_dims[:-1] + [self.q_dims[-1] * 2]
         self.q_layers = nn.Sequential()
         for i, (p, inp, out) in enumerate(zip(dropout, q_dims_[:-1], q_dims_[1:])):
-            self.q_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
-            self.q_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
+            self.q_layers.add_module("_".join(["dropout", str(i)]), nn.Dropout(p))
+            self.q_layers.add_module("_".join(["linear", str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = F.normalize(X, p=2, dim=1)
@@ -51,8 +51,8 @@ class Decoder(nn.Module):
 
         self.p_layers = nn.Sequential()
         for i, (p, inp, out) in enumerate(zip(dropout, p_dims[:-1], p_dims[1:])):
-            self.p_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
-            self.p_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
+            self.p_layers.add_module("_".join(["dropout", str(i)]), nn.Dropout(p))
+            self.p_layers.add_module("_".join(["linear", str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = X
