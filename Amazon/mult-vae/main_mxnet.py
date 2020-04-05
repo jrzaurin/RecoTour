@@ -16,6 +16,12 @@ from utils.reduce_lr_on_plateau import ReduceLROnPlateau
 ctx = mx.gpu() if mx.context.num_gpus() else mx.cpu()
 
 
+def vae_loss_fn(out, inp, mu, logvar, anneal):
+    neg_ll = -nd.mean(nd.sum(nd.log_softmax(out) * inp, -1))
+    KLD = -0.5 * nd.mean(nd.sum(1 + logvar - nd.power(mu, 2) - nd.exp(logvar), axis=1))
+    return neg_ll + anneal * KLD
+
+
 def early_stopping(curr_value, best_value, stop_step, patience, score_fn="loss"):
     if (score_fn == "loss" and curr_value <= best_value) or (
         score_fn == "metric" and curr_value >= best_value
@@ -35,33 +41,37 @@ def early_stopping(curr_value, best_value, stop_step, patience, score_fn="loss")
 
 def train_step(model, optimizer, data, epoch):
 
-    running_loss, update_count = 0.0, 0
+    running_loss = 0.0
+    global update_count
     N = data.shape[0]
     idxlist = list(range(N))
     np.random.shuffle(idxlist)
     training_steps = len(range(0, N, args.batch_size))
 
-    with trange(train_steps) as t:
+    with trange(training_steps) as t:
         for batch_idx, start_idx in zip(t, range(0, N, args.batch_size)):
             t.set_description("epoch: {}".format(epoch + 1))
 
             end_idx = min(start_idx + args.batch_size, N)
             X_inp = data[idxlist[start_idx:end_idx]]
-            X_inp = nd.from_numpy(X_inp.toarray()).as_in_context(ctx)
+            X_inp = nd.array(X_inp.toarray()).as_in_context(ctx)
+
+            if args.total_anneal_steps > 0:
+                anneal = min(
+                    args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
+                )
+            else:
+                anneal = args.anneal_cap
+            update_count += 1
 
             with autograd.record():
                 if model.__class__.__name__ == "MultiVAE":
-                    if args.total_anneal_steps > 0:
-                        anneal = min(
-                            args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
-                        )
-                    else:
-                        anneal = args.anneal_cap
-                    update_count += 1
-                    loss = model(X_inp, anneal)
+                    X_out, mu, logvar = model(X_inp)
+                    loss = vae_loss_fn(X_out, X_inp, mu, logvar, anneal)
                 elif model.__class__.__name__ == "MultiDAE":
-                    loss = model(X_inp)
-
+                    X_out = model(X_inp)
+                    loss = -F.mean(F.sum(F.log_softmax(X_out) * X_inp, -1))
+            loss.backward()
             trainer.step(X_inp.shape[0])
             running_loss += nd.mean(loss).asscalar()
             avg_loss = running_loss / (batch_idx + 1)
@@ -70,7 +80,8 @@ def train_step(model, optimizer, data, epoch):
 
 def eval_step(data_tr, data_te, data_type="valid"):
 
-    running_loss, update_count = 0.0, 0
+    running_loss = 0.0
+    global update_count
     eval_idxlist = list(range(data_tr.shape[0]))
     eval_N = data_tr.shape[0]
     eval_steps = len(range(0, eval_N, args.batch_size))
@@ -85,21 +96,23 @@ def eval_step(data_tr, data_te, data_type="valid"):
             X_tr = data_tr[eval_idxlist[start_idx:end_idx]]
             X_te = data_te[eval_idxlist[start_idx:end_idx]]
 
-            X_tr_inp = nd.from_numpy(X_inp.toarray()).as_in_context(ctx)
+            X_tr_inp = nd.array(X_tr.toarray()).as_in_context(ctx)
 
-            with autograd.predict_mode():
-                if model.__class__.__name__ == "MultiVAE":
-                    if args.total_anneal_steps > 0:
-                        anneal = min(
-                            args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
-                        )
-                    else:
-                    anneal = args.anneal_cap
-                    loss = model(X_tr_inp, anneal)
-                elif model.__class__.__name__ == "MultiDAE":
-                    loss = models(X_tr_inp)
+            if args.total_anneal_steps > 0:
+                anneal = min(
+                    args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
+                )
+            else:
+                anneal = args.anneal_cap
 
-            running_loss += loss.item()
+            if model.__class__.__name__ == "MultiVAE":
+                X_out, mu, logvar = model(X_tr_inp)
+                loss = vae_loss_fn(X_out, X_tr_inp, mu, logvar, anneal)
+            elif model.__class__.__name__ == "MultiDAE":
+                X_out = model(X_tr_inp)
+                loss = -F.mean(F.sum(F.log_softmax(X_out) * X_inp, -1))
+
+            running_loss += nd.mean(loss).asscalar()
             avg_loss = running_loss / (batch_idx + 1)
 
             # Exclude examples from training set
@@ -169,12 +182,11 @@ if __name__ == "__main__":
             dropout_enc=dropout_enc,
             dropout_dec=dropout_dec,
         )
-        import pdb; pdb.set_trace()  # breakpoint 61385d7a //
 
-    model.collect_params().initialize(mx.init.Xavier(), ctx=ctx)
+    model.initialize(mx.init.Xavier(), ctx=ctx)
     model.hybridize()
-    adam_optimizer = mx.optimizer.Adam(learning_rate=args.lr, wd=args.weight_decay)
-    trainer = gluon.Trainer(model.collect_params(), optimizer=adam_optimizer)
+    optimizer = mx.optimizer.Adam(learning_rate=args.lr, wd=args.weight_decay)
+    trainer = gluon.Trainer(model.collect_params(), optimizer=optimizer)
 
     if args.lr_scheduler:
         if args.early_stop_score_fn == "loss":

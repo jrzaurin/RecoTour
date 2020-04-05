@@ -33,7 +33,7 @@ class DataLoader(object):
         rows, cols = tp["user"], tp["item"]
         data = sparse.csr_matrix(
             (np.ones_like(rows), (rows, cols)),
-            dtype="float64",
+            dtype="float32",
             shape=(n_users, self.n_items),
         )
         return data
@@ -50,12 +50,12 @@ class DataLoader(object):
 
         data_tr = sparse.csr_matrix(
             (np.ones_like(rows_tr), (rows_tr, cols_tr)),
-            dtype="float64",
+            dtype="float32",
             shape=(end_idx - start_idx + 1, self.n_items),
         )
         data_te = sparse.csr_matrix(
             (np.ones_like(rows_te), (rows_te, cols_te)),
-            dtype="float64",
+            dtype="float32",
             shape=(end_idx - start_idx + 1, self.n_items),
         )
         return data_tr, data_te

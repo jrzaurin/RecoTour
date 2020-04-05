@@ -18,6 +18,14 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 
+def init_weights(model):
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            nn.init.xavier_uniform_(param.data)
+        elif 'bias' in name:
+            param.data.normal_(std=0.001)
+
+
 def vae_loss_fn(out, inp, mu, logvar, anneal):
     neg_ll = -torch.mean(torch.sum(F.log_softmax(out, 1) * inp, -1))
     KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
@@ -44,8 +52,8 @@ def early_stopping(curr_value, best_value, stop_step, patience, score_fn="loss")
 def train_step(model, optimizer, data, epoch):
 
     model.train()
-    running_loss, update_count = 0.0, 0
-
+    running_loss = 0.0
+    global update_count
     N = data.shape[0]
     idxlist = list(range(N))
     np.random.shuffle(idxlist)
@@ -85,7 +93,8 @@ def train_step(model, optimizer, data, epoch):
 def eval_step(data_tr, data_te, data_type="valid"):
 
     model.eval()
-    running_loss, update_count = 0.0, 0
+    running_loss = 0.0
+    global update_count
     eval_idxlist = list(range(data_tr.shape[0]))
     eval_N = data_tr.shape[0]
     eval_steps = len(range(0, eval_N, args.batch_size))
@@ -109,7 +118,6 @@ def eval_step(data_tr, data_te, data_type="valid"):
                     )
                 else:
                     anneal = args.anneal_cap
-
                 if model.__class__.__name__ == "MultiVAE":
                     X_out, mu, logvar = model(X_tr_inp)
                     loss = vae_loss_fn(X_out, X_tr_inp, mu, logvar, anneal)
@@ -188,6 +196,8 @@ if __name__ == "__main__":
             dropout_enc=dropout_enc,
             dropout_dec=dropout_dec,
         )
+
+    init_weights(model)
     model.to(device)
 
     optimizer = torch.optim.AdamW(

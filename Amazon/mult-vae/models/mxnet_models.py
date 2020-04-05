@@ -53,8 +53,8 @@ class Decoder(HybridBlock):
         with self.name_scope():
             self.p_layers = nn.HybridSequential(prefix="p_net")
             for p, inp, out in zip(dropout, p_dims[:-1], p_dims[1:]):
-                self.q_layers.add(nn.Dropout(p))
-                self.q_layers.add(nn.Dense(in_units=inp, units=out))
+                self.p_layers.add(nn.Dropout(p))
+                self.p_layers.add(nn.Dense(in_units=inp, units=out))
 
     def hybrid_forward(self, F, X):
         h = X
@@ -79,9 +79,7 @@ class MultiDAE(HybridBlock):
         self.decode = Decoder(p_dims, dropout_dec)
 
     def hybrid_forward(self, F, X):
-        y = self.decode(self.encode(X))
-        neg_ll = -F.mean(F.sum(F.log_softmax(out) * inp, -1))
-        return neg_ll
+        return self.decode(self.encode(X))
 
 
 class MultiVAE(HybridBlock):
@@ -97,18 +95,10 @@ class MultiVAE(HybridBlock):
         self.encode = VAEEncoder(q_dims, dropout_enc)
         self.decode = Decoder(p_dims, dropout_dec)
 
-    def hybrid_forward(self, F, X, anneal):
+    def hybrid_forward(self, F, X):
         mu, logvar = self.encode(X)
-        sampled_z = self.sample_z(mu, logvar)
-        y = self.decode(sampled_z)
-        neg_ll = -F.mean(F.sum(F.log_softmax(y) * X, -1))
-        KLD = -0.5 * F.mean(F.sum(1 + logvar - F.power(mu, 2) - F.exp(logvar), axis=1))
-        return neg_ll + anneal * KLD
-
-    def sample_z(self, F, mu, logvar):
         if autograd.is_training():
             std = F.exp(0.5 * logvar)
-            eps = F.normal_like(std)
-            return (eps * std) + mu
-        else:
-            return mu
+            eps = F.random.normal_like(std)
+            mu = (eps * std) + mu
+        return self.decode(mu), mu, logvar

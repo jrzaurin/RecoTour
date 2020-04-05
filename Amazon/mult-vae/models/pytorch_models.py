@@ -7,25 +7,14 @@ from typing import List
 from torch import nn
 
 
-def init_weights(model):
-    for m in model.modules():
-        if isinstance(m, nn.Linear):
-            nn.init.xavier_uniform_(m.weight.data)
-            if m.bias is not None:
-                m.bias.data.normal_(std=0.001)
-
-
 class DAEEncoder(nn.Module):
     def __init__(self, q_dims: List[int], dropout: List[float]):
         super().__init__()
 
-        self.q_layers = nn.ModuleList(
-            [
-                nn.Sequential(nn.Dropout(p), nn.Linear(inp, out))
-                for p, inp, out in zip(dropout, q_dims[:-1], q_dims[1:])
-            ]
-        )
-        init_weights(self)
+        self.q_layers = nn.Sequential()
+        for i, (p, inp, out) in enumerate(zip(dropout, q_dims[:-1], q_dims[1:])):
+            self.q_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
+            self.q_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = F.normalize(X, p=2, dim=1)
@@ -40,13 +29,10 @@ class VAEEncoder(nn.Module):
 
         self.q_dims = q_dims
         q_dims_ = self.q_dims[:-1] + [self.q_dims[-1] * 2]
-        self.q_layers = nn.ModuleList(
-            [
-                nn.Sequential(nn.Dropout(p), nn.Linear(inp, out))
-                for p, inp, out in zip(dropout, q_dims_[:-1], q_dims_[1:])
-            ]
-        )
-        init_weights(self)
+        self.q_layers = nn.Sequential()
+        for i, (p, inp, out) in enumerate(zip(dropout, q_dims_[:-1], q_dims_[1:])):
+            self.q_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
+            self.q_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = F.normalize(X, p=2, dim=1)
@@ -55,8 +41,7 @@ class VAEEncoder(nn.Module):
             if i != len(self.q_layers) - 1:
                 h = torch.tanh(h)
             else:
-                mu = h[:, : self.q_dims[-1]]
-                logvar = h[:, self.q_dims[-1] :]
+                mu, logvar = torch.split(h, self.q_dims[-1], dim=1)
         return mu, logvar
 
 
@@ -64,12 +49,10 @@ class Decoder(nn.Module):
     def __init__(self, p_dims: List[int], dropout: List[float]):
         super().__init__()
 
-        self.p_layers = nn.ModuleList(
-            [
-                nn.Sequential(nn.Dropout(p), nn.Linear(inp, out))
-                for p, inp, out in zip(dropout, p_dims[:-1], p_dims[1:])
-            ]
-        )
+        self.p_layers = nn.Sequential()
+        for i, (p, inp, out) in enumerate(zip(dropout, p_dims[:-1], p_dims[1:])):
+            self.p_layers.add_module('_'.join(['dropout', str(i)]), nn.Dropout(p))
+            self.p_layers.add_module('_'.join(['linear', str(i)]), nn.Linear(inp, out))
 
     def forward(self, X):
         h = X
@@ -112,13 +95,8 @@ class MultiVAE(nn.Module):
 
     def forward(self, X):
         mu, logvar = self.encode(X)
-        sampled_z = self.sample_z(mu, logvar)
-        return self.decode(sampled_z), mu, logvar
-
-    def sample_z(self, mu, logvar):
         if self.training:
             std = torch.exp(0.5 * logvar)
             eps = torch.randn_like(std)
-            return eps.mul(std).add_(mu)
-        else:
-            return mu
+            mu = (eps * std) + mu
+        return self.decode(mu), mu, logvar
