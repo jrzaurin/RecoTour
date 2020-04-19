@@ -59,7 +59,7 @@ def split_train_test(
 
     np.random.seed(98765)
 
-    for i, (_, group) in enumerate(data_grouped_by_user):
+    for i, (nm, group) in enumerate(data_grouped_by_user):
         n_items_u = len(group)
 
         if n_items_u >= 5:
@@ -104,12 +104,14 @@ def main(
     if dataset == "amazon":
         inp_path = DATA_DIR / "amazon-movies"
         filename = "reviews_Movies_and_TV_5.json.gz"
+        # filename = "reviews_Movies_and_TV_5.p"
 
         raw_data = pd.read_json(inp_path / filename, lines=True)
+        # raw_data = pd.read_pickle(inp_path / filename)
         keep_cols = ["reviewerID", "asin", "overall", "unixReviewTime"]
         raw_data = raw_data[keep_cols]
         raw_data.columns = new_colnames
-        raw_data = raw_data[raw_data["rating"] > 3]
+        # raw_data = raw_data[raw_data["rating"] > 3]
 
     elif dataset == "movielens":
         inp_path = DATA_DIR / "ml-20m"

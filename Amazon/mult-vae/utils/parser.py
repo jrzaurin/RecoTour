@@ -8,7 +8,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--dataset", type=str, default="amazon", help="one of: amazon or movielens"
+        "--dataset", type=str, default="amazon", help="one of: {amazon, movielens}"
     )
     parser.add_argument(
         "--log_dir", type=str, default="results", help="Store model path."
@@ -40,15 +40,12 @@ def parse_args():
     )
 
     # Train/Test parameters
-    parser.add_argument("--n_epochs", type=int, default=20, help="Number of epoch.")
+    parser.add_argument("--n_epochs", type=int, default=100, help="Number of epoch.")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="l2 reg.")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate.")
-    parser.add_argument("--batch_size", type=int, default=500, help="Batch size.")
+    parser.add_argument("--batch_size", type=int, default=512, help="Batch size.")
     parser.add_argument(
-        "--total_anneal_steps",
-        type=int,
-        default=200000,
-        help="total number of gradient updates for annealing",
+        "--constant_anneal", action="store_true", help="always use 'anneal_cap'",
     )
     parser.add_argument(
         "--anneal_cap", type=float, default=0.2, help="largest annealing parameter"
@@ -68,11 +65,11 @@ def parse_args():
     parser.add_argument(
         "--early_stop_patience",
         type=int,
-        default=10,
+        default=20,
         help="Patience for early stopping",
     )
     parser.add_argument(
-        "--early_stop_score_fn", type=str, default="loss", help="{loss, metric}"
+        "--early_stop_score_fn", type=str, default="metric", help="{loss, metric}"
     )
 
     # save parameters

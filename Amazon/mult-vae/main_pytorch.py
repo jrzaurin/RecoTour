@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,13 +27,13 @@ def init_weights(model):
             param.data.normal_(std=0.001)
 
 
-def vae_loss_fn(out, inp, mu, logvar, anneal):
+def vae_loss_fn(inp, out, mu, logvar, anneal):
     neg_ll = -torch.mean(torch.sum(F.log_softmax(out, 1) * inp, -1))
     KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
     return neg_ll + anneal * KLD
 
 
-def early_stopping(curr_value, best_value, stop_step, patience, score_fn="loss"):
+def early_stopping(curr_value, best_value, stop_step, patience, score_fn):
     if (score_fn == "loss" and curr_value <= best_value) or (
         score_fn == "metric" and curr_value >= best_value
     ):
@@ -67,18 +68,17 @@ def train_step(model, optimizer, data, epoch):
             X_inp = data[idxlist[start_idx:end_idx]]
             X_inp = torch.FloatTensor(X_inp.toarray()).to(device)
 
-            if args.total_anneal_steps > 0:
-                anneal = min(
-                    args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
-                )
-            else:
+            if args.constant_anneal:
                 anneal = args.anneal_cap
+            else:
+                anneal = min(args.anneal_cap, update_count / total_anneal_steps)
             update_count += 1
 
             optimizer.zero_grad()
             if model.__class__.__name__ == "MultiVAE":
                 X_out, mu, logvar = model(X_inp)
-                loss = vae_loss_fn(X_out, X_inp, mu, logvar, anneal)
+                loss = vae_loss_fn(X_inp, X_out, mu, logvar, anneal)
+                train_step.anneal = anneal
             elif model.__class__.__name__ == "MultiDAE":
                 X_out = model(X_inp)
                 loss = -torch.mean(torch.sum(F.log_softmax(X_out, 1) * X_inp, -1))
@@ -94,7 +94,6 @@ def eval_step(data_tr, data_te, data_type="valid"):
 
     model.eval()
     running_loss = 0.0
-    global update_count
     eval_idxlist = list(range(data_tr.shape[0]))
     eval_N = data_tr.shape[0]
     eval_steps = len(range(0, eval_N, args.batch_size))
@@ -109,18 +108,11 @@ def eval_step(data_tr, data_te, data_type="valid"):
                 end_idx = min(start_idx + args.batch_size, eval_N)
                 X_tr = data_tr[eval_idxlist[start_idx:end_idx]]
                 X_te = data_te[eval_idxlist[start_idx:end_idx]]
-
                 X_tr_inp = torch.FloatTensor(X_tr.toarray()).to(device)
 
-                if args.total_anneal_steps > 0:
-                    anneal = min(
-                        args.anneal_cap, 1.0 * update_count / args.total_anneal_steps
-                    )
-                else:
-                    anneal = args.anneal_cap
                 if model.__class__.__name__ == "MultiVAE":
                     X_out, mu, logvar = model(X_tr_inp)
-                    loss = vae_loss_fn(X_out, X_tr_inp, mu, logvar, anneal)
+                    loss = vae_loss_fn(X_tr_inp, X_out, mu, logvar, train_step.anneal)
                 elif model.__class__.__name__ == "MultiDAE":
                     X_out = model(X_tr_inp)
                     loss = -torch.mean(
@@ -138,7 +130,7 @@ def eval_step(data_tr, data_te, data_type="valid"):
                 r50 = Recall_at_k_batch(X_out, X_te, k=50)
                 n100_list.append(n100)
                 r20_list.append(r20)
-                r50_list.append(r20)
+                r50_list.append(r50)
 
                 t.set_postfix(loss=avg_loss)
 
@@ -154,7 +146,7 @@ if __name__ == "__main__":
     args = parse_args()
     DATA_DIR = Path("data")
     data_path = DATA_DIR / "_".join([args.dataset, "processed"])
-    model_name = "_".join([args.model, str(datetime.now()).replace(" ", "_")])
+    model_name = "_".join(["pt", args.model, str(datetime.now()).replace(" ", "_")])
 
     log_dir = Path(args.log_dir)
     model_weights = log_dir / "weights"
@@ -166,7 +158,16 @@ if __name__ == "__main__":
     train_data = data_loader.load_data("train")
     valid_data_tr, valid_data_te = data_loader.load_data("validation")
     test_data_tr, test_data_te = data_loader.load_data("test")
+
     training_steps = len(range(0, train_data.shape[0], args.batch_size))
+    try:
+        total_anneal_steps = (
+            training_steps * (args.n_epochs - int(args.n_epochs * 0.15))
+        ) / args.anneal_cap
+    except ZeroDivisionError:
+        assert (
+            args.constant_anneal
+        ), "if 'anneal_cap' is set to 0.0 'constant_anneal' must be set to 'True"
 
     p_dims = eval(args.p_dims)
     q_dims = eval(args.q_dims)
@@ -199,7 +200,6 @@ if __name__ == "__main__":
 
     init_weights(model)
     model.to(device)
-
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
@@ -226,8 +226,9 @@ if __name__ == "__main__":
         best_score = np.inf
     elif args.early_stop_score_fn == "metric":
         best_score = -np.inf
-    update_count = 0
     stop_step = 0
+    update_count = 0
+    stop = False
     for epoch in range(args.n_epochs):
         train_step(model, optimizer, train_data, epoch)
         if epoch % args.eval_every == (args.eval_every - 1):
@@ -237,14 +238,18 @@ if __name__ == "__main__":
             elif args.early_stop_score_fn == "metric":
                 early_stop_score = n100
             best_score, stop_step, stop = early_stopping(
-                early_stop_score, best_score, stop_step, args.early_stop_patience
+                early_stop_score,
+                best_score,
+                stop_step,
+                args.early_stop_patience,
+                args.early_stop_score_fn,
             )
             if args.lr_scheduler:
                 scheduler.step(early_stop_score)
             print("=" * 80)
             print(
-                "| valid loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | "
-                "r50 {:4.2f}".format(val_loss, n100, r20, r50)
+                "| valid loss {:4.3f} | n100 {:4.3f} | r20 {:4.3f} | "
+                "r50 {:4.3f}".format(val_loss, n100, r20, r50)
             )
             print("=" * 80)
         if stop:
@@ -253,17 +258,20 @@ if __name__ == "__main__":
             best_epoch = epoch
             torch.save(model.state_dict(), model_weights / (model_name + ".pt"))
 
-    # Run on test data.
-    test_loss, n100, r20, r50 = eval_step(test_data_tr, test_data_te, data_type="test")
-    print("=" * 80)
-    print(
-        "| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | "
-        "r50 {:4.2f}".format(test_loss, n100, r20, r50)
-    )
-    print("=" * 80)
-
-    # Save results
     if args.save_results:
+        # Run on test data with best model
+        model.load_state_dict(torch.load(model_weights / (model_name + ".pt")))
+        test_loss, n100, r20, r50 = eval_step(
+            test_data_tr, test_data_te, data_type="test"
+        )
+        print("=" * 80)
+        print(
+            "| End of training | test loss {:4.3f} | n100 {:4.3f} | r20 {:4.3f} | "
+            "r50 {:4.3f}".format(test_loss, n100, r20, r50)
+        )
+        print("=" * 80)
+
+        # Save results
         results_d = {}
         results_d["args"] = args.__dict__
         results_d["best_epoch"] = best_epoch
@@ -271,4 +279,4 @@ if __name__ == "__main__":
         results_d["n100"] = n100
         results_d["r20"] = r20
         results_d["r50"] = r50
-        pickle.dump(results_d, open((log_dir / model_name) + ".p", "wb"))
+        pickle.dump(results_d, open(str(log_dir / (model_name + ".p")), "wb"))
