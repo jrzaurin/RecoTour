@@ -1,9 +1,7 @@
-import os
 import pathlib
 import numpy as np
 import pandas as pd
 
-from pathlib import Path
 from scipy import sparse
 
 from typing import Tuple

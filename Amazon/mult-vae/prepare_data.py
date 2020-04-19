@@ -5,7 +5,7 @@ import numpy as np
 import pickle
 
 from fire import Fire
-from typing import Tuple, Dict, Union, Any
+from typing import Tuple, Dict, Union
 from pathlib import Path
 
 

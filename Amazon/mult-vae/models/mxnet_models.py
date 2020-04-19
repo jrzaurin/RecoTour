@@ -1,10 +1,7 @@
-import numpy as np
-import mxnet as mx
-
 from typing import List
 
-from mxnet import nd, init, autograd
-from mxnet.gluon import nn, Block, HybridBlock
+from mxnet import autograd
+from mxnet.gluon import nn, HybridBlock
 
 
 class DAEEncoder(HybridBlock):
