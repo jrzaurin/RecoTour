@@ -15,6 +15,7 @@ datasets/
 data/
 Data/
 model_weights/
+results/
 weights/
 *.csv
 
