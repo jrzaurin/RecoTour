@@ -1,62 +1,62 @@
-# python main_pytorch.py --dataset movielens --save_results
-# python main_pytorch.py --dataset movielens --constant_anneal --anneal_cap 0.0 --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[128, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[256, 1024]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[256, 512, 1024]" --dropout_enc "[0.5, 0.2, 0.2]" --dropout_dec "[0.2, 0.2, 0.2]" --lr_scheduler --save_results
+python main_pytorch.py --dataset movielens --save_results
+python main_pytorch.py --dataset movielens --constant_anneal --anneal_cap 0.0 --save_results
+python main_pytorch.py --dataset movielens --p_dims "[128, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
+python main_pytorch.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
+python main_pytorch.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
+python main_pytorch.py --dataset movielens --p_dims "[256, 1024]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
+python main_pytorch.py --dataset movielens --p_dims "[256, 512, 1024]" --dropout_enc "[0.5, 0.2, 0.2]" --dropout_dec "[0.2, 0.2, 0.2]" --lr_scheduler --save_results
 
-# python main_mxnet.py --dataset movielens --save_results
-# python main_mxnet.py --dataset movielens  --constant_anneal --anneal_cap 0.0 --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[128, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[256, 1024]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[256, 512, 1024]" --dropout_enc "[0.5, 0.2, 0.2]" --dropout_dec "[0.2, 0.2, 0.2]" --lr_scheduler --save_results
+python main_mxnet.py --dataset movielens --save_results
+python main_mxnet.py --dataset movielens  --constant_anneal --anneal_cap 0.0 --save_results
+python main_mxnet.py --dataset movielens --p_dims "[128, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
+python main_mxnet.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0]" --dropout_dec "[0., 0.]" --lr_scheduler --save_results
+python main_mxnet.py --dataset movielens --p_dims "[256, 512]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
+python main_mxnet.py --dataset movielens --p_dims "[256, 1024]" --dropout_enc "[0.5, 0.2]" --dropout_dec "[0.2, 0.2]" --lr_scheduler --save_results
+python main_mxnet.py --dataset movielens --p_dims "[256, 512, 1024]" --dropout_enc "[0.5, 0.2, 0.2]" --dropout_dec "[0.2, 0.2, 0.2]" --lr_scheduler --save_results
 
-# python main_pytorch.py --dataset movielens --weight_decay 0.001 --save_results
-# python main_pytorch.py --dataset movielens --p_dims "[512, 1024]" --save_results
+python main_pytorch.py --dataset movielens --weight_decay 0.001 --save_results
+python main_pytorch.py --dataset movielens --p_dims "[512, 1024]" --save_results
 
-# python main_mxnet.py --dataset movielens --weight_decay 0.001 --save_results
-# python main_mxnet.py --dataset movielens --p_dims "[512, 1024]" --save_results
-# python main_mxnet.py --dataset movielens --anneal_cap 0.05 --save_results
-# python main_mxnet.py --dataset movielens --anneal_cap 0.1 --lr 0.0001 --save_results
+python main_mxnet.py --dataset movielens --weight_decay 0.001 --save_results
+python main_mxnet.py --dataset movielens --p_dims "[512, 1024]" --save_results
+python main_mxnet.py --dataset movielens --anneal_cap 0.05 --save_results
+python main_mxnet.py --dataset movielens --anneal_cap 0.1 --lr 0.0001 --save_results
 
-# python main_pytorch.py --dataset movielens --model "dae" --save_results
-# python main_pytorch.py --dataset movielens --model "dae" --p_dims "[128, 256]" --save_results
-# python main_pytorch.py --dataset movielens --model "dae" --p_dims "[256, 512]" --save_results
-# python main_pytorch.py --dataset movielens --model "dae" --p_dims "[512, 1024]" --save_results
+python main_pytorch.py --dataset movielens --model "dae" --save_results
+python main_pytorch.py --dataset movielens --model "dae" --p_dims "[128, 256]" --save_results
+python main_pytorch.py --dataset movielens --model "dae" --p_dims "[256, 512]" --save_results
+python main_pytorch.py --dataset movielens --model "dae" --p_dims "[512, 1024]" --save_results
 
-# python main_mxnet.py --dataset movielens --model "dae" --save_results
-# python main_mxnet.py --dataset movielens --model "dae" --p_dims "[128, 256]" --save_results
-# python main_mxnet.py --dataset movielens --model "dae" --p_dims "[256, 512]" --save_results
-# python main_mxnet.py --dataset movielens --model "dae" --p_dims "[512, 1024]" --save_results
+python main_mxnet.py --dataset movielens --model "dae" --save_results
+python main_mxnet.py --dataset movielens --model "dae" --p_dims "[128, 256]" --save_results
+python main_mxnet.py --dataset movielens --model "dae" --p_dims "[256, 512]" --save_results
+python main_mxnet.py --dataset movielens --model "dae" --p_dims "[512, 1024]" --save_results
 
-# python main_pytorch.py --dataset movielens --model "vae" --p_dims "[128, 256]" --save_results
-# python main_pytorch.py --dataset movielens --model "vae" --p_dims "[256, 512]" --save_results
-# python main_pytorch.py --dataset movielens --model "vae" --p_dims "[512, 1024]" --early_stop_patience 30 --lr_scheduler --lr_patience 10 --save_results
+python main_pytorch.py --dataset movielens --model "vae" --p_dims "[128, 256]" --save_results
+python main_pytorch.py --dataset movielens --model "vae" --p_dims "[256, 512]" --save_results
+python main_pytorch.py --dataset movielens --model "vae" --p_dims "[512, 1024]" --early_stop_patience 30 --lr_scheduler --lr_patience 10 --save_results
 
-# python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --save_results
-# python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[128, 256]" --save_results
-# python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[256, 512]" --save_results
-# python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[512, 1024]" --save_results --early_stop_patience 30 --lr_scheduler --lr_patience 10 --save_results
+python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --save_results
+python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[128, 256]" --save_results
+python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[256, 512]" --save_results
+python main_mxnet.py --dataset movielens --model "vae" --anneal_cap 0.02 --p_dims "[512, 1024]" --save_results --early_stop_patience 30 --lr_scheduler --lr_patience 10 --save_results
 
-# python main_pytorch.py --anneal_cap 0. --constant_anneal --save_results
-# python main_pytorch.py --anneal_cap 0.1 --save_results
-# python main_pytorch.py --anneal_cap 0.2 --save_results
+python main_pytorch.py --anneal_cap 0. --constant_anneal --save_results
+python main_pytorch.py --anneal_cap 0.1 --save_results
+python main_pytorch.py --anneal_cap 0.2 --save_results
 
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --save_results
-# python main_mxnet.py --anneal_cap 0.1 --save_results
-# python main_mxnet.py --anneal_cap 0.2 --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --save_results
+python main_mxnet.py --anneal_cap 0.1 --save_results
+python main_mxnet.py --anneal_cap 0.2 --save_results
 
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,128]" --save_results
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,128]" --lr 0.01 --save_results
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,256]" --save_results
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[128,512]" --save_results
-# python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[512,1024]" --early_stop_patience 10 --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,128]" --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,128]" --lr 0.01 --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[64,256]" --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[128,512]" --save_results
+python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[512,1024]" --early_stop_patience 10 --save_results
 
-# python main_pytorch.py --model "dae" --save_results
-# python main_mxnet.py --model "dae" --p_dims "[64,256]" --save_results
+python main_pytorch.py --model "dae" --save_results
+python main_mxnet.py --model "dae" --p_dims "[64,256]" --save_results
 
 ###############################################################################
 # MOVIELENS
