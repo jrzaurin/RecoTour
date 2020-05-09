@@ -1,17 +1,17 @@
 import os
-import numpy as np
 import pickle
-import mxnet as mx
-
-from tqdm import trange
-from pathlib import Path
 from datetime import datetime
-from mxnet import gluon, autograd, nd
+from pathlib import Path
+
+import mxnet as mx
+import numpy as np
+from mxnet import autograd, gluon, nd
+from tqdm import trange
 
 from models.mxnet_models import MultiDAE, MultiVAE
-from utils.parser import parse_args
 from utils.data_loader import DataLoader
 from utils.metrics import NDCG_binary_at_k_batch, Recall_at_k_batch
+from utils.parser import parse_args
 from utils.reduce_lr_on_plateau import ReduceLROnPlateau
 
 ctx = mx.gpu() if mx.context.num_gpus() else mx.cpu()
@@ -59,6 +59,11 @@ def train_step(model, optimizer, data, epoch):
 
             if args.constant_anneal:
                 anneal = args.anneal_cap
+            elif args.anneal_epochs is not None:
+                anneal = min(
+                    args.anneal_cap,
+                    args.anneal_cap * (update_count / total_anneal_steps),
+                )
             else:
                 anneal = min(args.anneal_cap, update_count / total_anneal_steps)
             update_count += 1
@@ -147,14 +152,17 @@ if __name__ == "__main__":
     test_data_tr, test_data_te = data_loader.load_data("test")
 
     training_steps = len(range(0, train_data.shape[0], args.batch_size))
-    try:
-        total_anneal_steps = (
-            training_steps * (args.n_epochs - int(args.n_epochs * 0.15))
-        ) / args.anneal_cap
-    except ZeroDivisionError:
-        assert (
-            args.constant_anneal
-        ), "if 'anneal_cap' is set to 0.0 'constant_anneal' must be set to 'True"
+    if args.anneal_epochs:
+        total_anneal_steps = training_steps * args.anneal_epochs
+    else:
+        try:
+            total_anneal_steps = (
+                training_steps * (args.n_epochs - int(args.n_epochs * 0.15))
+            ) / args.anneal_cap
+        except ZeroDivisionError:
+            assert (
+                args.constant_anneal
+            ), "if 'anneal_cap' is set to 0.0 'constant_anneal' must be set to 'True"
 
     p_dims = eval(args.p_dims)
     q_dims = eval(args.q_dims)

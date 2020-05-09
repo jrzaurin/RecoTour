@@ -1,7 +1,7 @@
 from typing import List
 
 from mxnet import autograd
-from mxnet.gluon import nn, HybridBlock
+from mxnet.gluon import HybridBlock, nn
 
 
 class DAEEncoder(HybridBlock):

@@ -51,6 +51,12 @@ def parse_args():
         "--anneal_cap", type=float, default=0.2, help="largest annealing parameter"
     )
     parser.add_argument(
+        "--anneal_epochs",
+        type=int,
+        default=None,
+        help="gradually increase to anneal_cap in anneal_epochs",
+    )
+    parser.add_argument(
         "--lr_scheduler", action="store_true", help="if true use ReduceLROnPlateau",
     )
     parser.add_argument(
