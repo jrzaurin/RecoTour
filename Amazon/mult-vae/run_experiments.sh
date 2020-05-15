@@ -58,7 +58,7 @@ python main_mxnet.py --anneal_cap 0. --constant_anneal --p_dims "[512,1024]" --e
 python main_pytorch.py --model "dae" --save_results
 python main_mxnet.py --model "dae" --p_dims "[64,256]" --save_results
 
-###############################################################################
+# ###############################################################################
 # MOVIELENS
 python main_pytorch.py --dataset movielens --p_dims "[100,300]" --save_results
 python main_pytorch.py --dataset movielens --p_dims "[200,600]" --save_results
@@ -120,3 +120,37 @@ python main_mxnet.py --p_dims "[100,300]" --anneal_cap 0.4 --save_results
 python main_mxnet.py --p_dims "[100,300]" --anneal_cap 0.6 --save_results
 python main_mxnet.py --p_dims "[100,300]" --anneal_cap 0.8 --save_results
 python main_mxnet.py --p_dims "[100,300]" --anneal_cap 1.0 --save_results
+
+MOVIELENS
+python main_pytorch.py --dataset movielens --p_dims "[100,300]" --n_epochs 200 --anneal_cap 1.
+python main_pytorch.py --dataset movielens --p_dims "[200,600]" --n_epochs 200 --anneal_cap 1.
+python main_pytorch.py --dataset movielens --p_dims "[300,900]" --n_epochs 200 --anneal_cap 1.
+
+python main_mxnet.py --dataset movielens --p_dims "[100,300]" --n_epochs 200 --anneal_cap 1.
+python main_mxnet.py --dataset movielens --p_dims "[200,600]" --n_epochs 200 --anneal_cap 1.
+python main_mxnet.py --dataset movielens --p_dims "[300,900]" --n_epochs 200 --anneal_cap 1.
+
+python main_pytorch.py --dataset movielens --p_dims "[100,300]" --anneal_cap 0.62 --save_results
+python main_pytorch.py --dataset movielens --p_dims "[200,600]" --anneal_cap 0.45 --save_results
+python main_pytorch.py --dataset movielens --p_dims "[300,900]" --anneal_cap 0.40 --save_results
+
+python main_mxnet.py --dataset movielens --p_dims "[100,300]" --anneal_cap 0.13 --save_results
+python main_mxnet.py --dataset movielens --p_dims "[200,600]" --anneal_cap 0.07 --save_results
+python main_mxnet.py --dataset movielens --p_dims "[300,900]" --anneal_cap 0.06 --save_results
+
+AMAZON
+python main_pytorch.py --p_dims "[100,300]" --n_epochs 200 --anneal_cap 1.
+python main_pytorch.py --p_dims "[200,600]" --n_epochs 200 --anneal_cap 1.
+python main_pytorch.py --p_dims "[300,900]" --n_epochs 200 --anneal_cap 1.
+
+python main_mxnet.py --p_dims "[100,300]" --n_epochs 200 --anneal_cap 1.
+python main_mxnet.py --p_dims "[200,600]" --n_epochs 200 --anneal_cap 1.
+python main_mxnet.py --p_dims "[300,900]" --n_epochs 200 --anneal_cap 1.
+
+python main_pytorch.py --p_dims "[100,300]" --anneal_cap 1.0 --save_results
+python main_pytorch.py --p_dims "[200,600]" --anneal_cap 0.3 --save_results
+python main_pytorch.py --p_dims "[300,900]" --anneal_cap 0.8 --save_results
+
+python main_mxnet.py --p_dims "[100,300]" --anneal_cap 0.10 --save_results
+python main_mxnet.py --p_dims "[200,600]" --anneal_cap 0.06 --save_results
+python main_mxnet.py --p_dims "[300,900]" --anneal_cap 0.04 --save_results
