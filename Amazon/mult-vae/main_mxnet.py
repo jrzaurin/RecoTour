@@ -59,11 +59,6 @@ def train_step(model, optimizer, data, epoch):
 
             if args.constant_anneal:
                 anneal = args.anneal_cap
-            elif args.anneal_epochs is not None:
-                anneal = min(
-                    args.anneal_cap,
-                    args.anneal_cap * (update_count / total_anneal_steps),
-                )
             else:
                 anneal = min(args.anneal_cap, update_count / total_anneal_steps)
             update_count += 1
@@ -152,17 +147,14 @@ if __name__ == "__main__":
     test_data_tr, test_data_te = data_loader.load_data("test")
 
     training_steps = len(range(0, train_data.shape[0], args.batch_size))
-    if args.anneal_epochs:
-        total_anneal_steps = training_steps * args.anneal_epochs
-    else:
-        try:
-            total_anneal_steps = (
-                training_steps * (args.n_epochs - int(args.n_epochs * 0.15))
-            ) / args.anneal_cap
-        except ZeroDivisionError:
-            assert (
-                args.constant_anneal
-            ), "if 'anneal_cap' is set to 0.0 'constant_anneal' must be set to 'True"
+    try:
+        total_anneal_steps = (
+            training_steps * (args.n_epochs - int(args.n_epochs * 0.15))
+        ) / args.anneal_cap
+    except ZeroDivisionError:
+        assert (
+            args.constant_anneal
+        ), "if 'anneal_cap' is set to 0.0 'constant_anneal' must be set to 'True"
 
     p_dims = eval(args.p_dims)
     q_dims = eval(args.q_dims)
