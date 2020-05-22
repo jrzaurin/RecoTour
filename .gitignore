@@ -17,6 +17,7 @@ Data/
 model_weights/
 results/
 weights/
+store/
 *.csv
 
 # tests
