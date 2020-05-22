@@ -95,5 +95,5 @@ class MultiVAE(nn.Module):
         mu, logvar = self.encode(X)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        sample_z = mu + float(self.training) * eps * std
-        return self.decode(sample_z), mu, logvar
+        sampled_z = mu + float(self.training) * eps * std
+        return self.decode(sampled_z), mu, logvar
