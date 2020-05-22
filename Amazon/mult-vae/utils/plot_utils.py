@@ -11,7 +11,9 @@ import seaborn as sns
 sns.set(color_codes=True)
 sns.set(context="notebook", font_scale=1.0, font="serif")
 
-results_dir = Path("../results")
+results_dir = Path(
+    "/Users/javier/ml_experiments_python/RecoTour/Amazon/mult-vae/results"
+)
 
 
 def prepare_dataframe_for_plot(
@@ -176,7 +178,7 @@ def find_best(dl_frame: str, model: str) -> pd.DataFrame:
         .reset_index(drop=True)
     )
     results_df["dl_frame"] = "Pytorch" if dl_frame == "pt" else "Mxnet"
-    results_df.loc[results_df.model=='dae', 'anneal_cap'] = "NA"
+    results_df.loc[results_df.model == "dae", "anneal_cap"] = "NA"
     return results_df[keep_cols]
 
 

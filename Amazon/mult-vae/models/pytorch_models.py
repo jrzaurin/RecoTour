@@ -65,9 +65,9 @@ class MultiDAE(nn.Module):
     def __init__(
         self,
         p_dims: List[int],
+        q_dims: List[int],
         dropout_enc: List[float],
         dropout_dec: List[float],
-        q_dims: List[int] = None,
     ):
         super().__init__()
 
@@ -82,9 +82,9 @@ class MultiVAE(nn.Module):
     def __init__(
         self,
         p_dims: List[int],
+        q_dims: List[int],
         dropout_enc: List[float],
         dropout_dec: List[float],
-        q_dims: List[int] = None,
     ):
         super().__init__()
 
@@ -93,8 +93,7 @@ class MultiVAE(nn.Module):
 
     def forward(self, X):
         mu, logvar = self.encode(X)
-        if self.training:
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)
-            mu = (eps * std) + mu
-        return self.decode(mu), mu, logvar
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        sample_z = mu + float(self.training) * eps * std
+        return self.decode(sample_z), mu, logvar

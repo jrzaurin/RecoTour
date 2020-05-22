@@ -40,7 +40,7 @@ def parse_args():
     )
 
     # Train/Test parameters
-    parser.add_argument("--n_epochs", type=int, default=100, help="Number of epoch.")
+    parser.add_argument("--n_epochs", type=int, default=200, help="Number of epoch.")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="l2 reg.")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate.")
     parser.add_argument("--batch_size", type=int, default=512, help="Batch size.")
