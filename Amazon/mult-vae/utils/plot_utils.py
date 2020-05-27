@@ -196,10 +196,13 @@ def plot_dataset_loss(dataset: str):
     df_mx = df[(df.dataset == dataset) & (df.dl_frame == "Mxnet")][
         ["loss", "n100", "r20", "r50"]
     ].melt("loss", var_name="metric", value_name="value")
-    # manually removing an "odd" mxnet ml_experiment
+
+    # manually removing an results that were so bad that mess the plot
     if dataset == "movielens":
-        df_mx = df_mx.sort_values('loss')
-        df_mx.drop(df_mx.tail(3).index,inplace=True)
+        df_mx = df_mx[df_mx.loss < 380]
+    elif dataset == "amazon":
+        df_mx = df_mx[df_mx.loss < 95]
+        df_pt = df_pt[df_pt.loss < 105]
 
     plt.figure(figsize=(15, 4))
 
