@@ -6,10 +6,13 @@
 # RecoTour
 
 This repo intends to be a tour through some recommendation algorithms in
-python using various dataset. Companion Medium posts can be found
-[here](https://medium.com/datadriveninvestor/recotour-a-tour-through-recommendation-algorithms-in-python-52d780628ab9)
-and
-[here](https://towardsdatascience.com/recotour-ii-neural-recommendation-algorithms-49733938d56e).
+python using various dataset. Companion posts are:
+
+1. [Recotour: a tour through recommendation algorithms in python](https://medium.com/datadriveninvestor/recotour-a-tour-through-recommendation-algorithms-in-python-52d780628ab9)
+
+2. [RecoTour II: neural recommendation algorithms](https://towardsdatascience.com/recotour-ii-neural-recommendation-algorithms-49733938d56e)
+
+3. [RecoTour III: Variational Autoencoders for Collaborative Filtering with Mxnet and Pytorch](https://jrzaurin.github.io/infinitoml/2020/05/15/mult-vae.html).
 
 At the moment the datasets included are:
 
@@ -57,6 +60,7 @@ be found in `using_ncdg.py` in the directory `py_scripts`.
 
 1. Neural Collaborative Filtering (Xiangnan He et al., 2017)
 2. Neural Graph Collaborative Filtering (Wang Xiang et al. 2019)
+2. Variational Autoencoders for Collaborative Filtering (Dawen Liang et al,. 2018)
 
 I hope the code here is useful to someone. If you have any idea on how to
 improve the content of the repo, or you want to contribute, let me know.
