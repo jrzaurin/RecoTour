@@ -21,20 +21,26 @@ cores = multiprocessing.cpu_count()
 use_cuda = torch.cuda.is_available()
 
 
-def early_stopping(log_value, best_value, stopping_step, patience, expected_order='asc'):
+def early_stopping(
+    log_value, best_value, stopping_step, patience, expected_order="asc"
+):
     """
     if log_value >= best_value (asc) or log_value <= best_value (des) more
     than our patience, stop
     """
-    assert expected_order in ['asc', 'des']
-    if (expected_order == 'asc' and log_value >= best_value) or (expected_order == 'des' and log_value <= best_value):
+    assert expected_order in ["asc", "des"]
+    if (expected_order == "asc" and log_value >= best_value) or (
+        expected_order == "des" and log_value <= best_value
+    ):
         stopping_step = 0
         best_value = log_value
     else:
         stopping_step += 1
 
     if stopping_step >= patience:
-        print("Early stopping is trigger at step: {} log:{}".format(patience, log_value))
+        print(
+            "Early stopping is trigger at step: {} log:{}".format(patience, log_value)
+        )
         should_stop = True
     else:
         should_stop = False
@@ -45,11 +51,11 @@ def early_stopping(log_value, best_value, stopping_step, patience, expected_orde
 def train(model, data_generator, optimizer, scheduler):
     model.train()
     n_batch = data_generator.n_train // data_generator.batch_size + 1
-    running_loss=0
+    running_loss = 0
     for _ in range(n_batch):
         u, i, j = data_generator.sample()
         optimizer.zero_grad()
-        loss = model(u,i,j)
+        loss = model(u, i, j)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
@@ -84,8 +90,12 @@ def test_CPU(model, users_to_test):
     Distributes through "cores" the test_one_user function, for all users
     """
     model.eval()
-    result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
-              'hit_ratio': np.zeros(len(Ks))}
+    result = {
+        "precision": np.zeros(len(Ks)),
+        "recall": np.zeros(len(Ks)),
+        "ndcg": np.zeros(len(Ks)),
+        "hit_ratio": np.zeros(len(Ks)),
+    }
 
     pool = multiprocessing.Pool(cores)
 
@@ -101,22 +111,22 @@ def test_CPU(model, users_to_test):
         start = u_batch_id * u_batch_size
         end = (u_batch_id + 1) * u_batch_size
 
-        user_batch = test_users[start: end]
+        user_batch = test_users[start:end]
         item_batch = range(data_generator.n_items)
 
         user_emb = model.u_g_embeddings[user_batch].detach()
 
-        rate_batch  = torch.mm(user_emb, model.i_g_embeddings.t().detach()).cpu().numpy()
+        rate_batch = torch.mm(user_emb, model.i_g_embeddings.t().detach()).cpu().numpy()
 
         user_batch_rating_uid = zip(rate_batch, user_batch)
         batch_result = pool.map(test_one_user, user_batch_rating_uid)
         count += len(batch_result)
 
         for re in batch_result:
-            result['precision'] += re['precision']/n_test_users
-            result['recall'] += re['recall']/n_test_users
-            result['ndcg'] += re['ndcg']/n_test_users
-            result['hit_ratio'] += re['hit_ratio']/n_test_users
+            result["precision"] += re["precision"] / n_test_users
+            result["recall"] += re["recall"] / n_test_users
+            result["ndcg"] += re["ndcg"] / n_test_users
+            result["hit_ratio"] += re["hit_ratio"] / n_test_users
 
     assert count == n_test_users
     pool.close()
@@ -128,10 +138,10 @@ def split_mtx(X, n_folds=100):
     Split a matrix/Tensor into n_folds (for the user embeddings and the R matrices)
     """
     X_folds = []
-    fold_len = X.shape[0]//n_folds
+    fold_len = X.shape[0] // n_folds
     for i in range(n_folds):
         start = i * fold_len
-        if i == n_folds -1:
+        if i == n_folds - 1:
             end = X.shape[0]
         else:
             end = (i + 1) * fold_len
@@ -155,10 +165,10 @@ def ndcg_at_k_gpu(pred_items, test_items, test_indices, k):
     ndcg@k
     """
     r = (test_items * pred_items).gather(1, test_indices)
-    f = torch.from_numpy(np.log2(np.arange(2, k+2))).float().cuda()
-    dcg = (r[:, :k]/f).sum(1)
-    dcg_max = (torch.sort(r, dim=1, descending=True)[0][:, :k]/f).sum(1)
-    ndcg = dcg/dcg_max
+    f = torch.from_numpy(np.log2(np.arange(2, k + 2))).float().cuda()
+    dcg = (r[:, :k] / f).sum(1)
+    dcg_max = (torch.sort(r, dim=1, descending=True)[0][:, :k] / f).sum(1)
+    ndcg = dcg / dcg_max
     ndcg[torch.isnan(ndcg)] = 0
     return ndcg
 
@@ -185,27 +195,31 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
     tr_folds = split_mtx(Rtr)
     te_folds = split_mtx(Rte)
 
-    fold_prec, fold_rec, fold_ndcg, fold_hr = \
-        defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
+    fold_prec, fold_rec, fold_ndcg, fold_hr = (
+        defaultdict(list),
+        defaultdict(list),
+        defaultdict(list),
+        defaultdict(list),
+    )
     for ue_f, tr_f, te_f in zip(ue_folds, tr_folds, te_folds):
 
         scores = torch.mm(ue_f, i_emb.t())
 
         test_items = torch.from_numpy(te_f.todense()).float().cuda()
-        non_train_items = torch.from_numpy(1-(tr_f.todense())).float().cuda()
+        non_train_items = torch.from_numpy(1 - (tr_f.todense())).float().cuda()
         scores = scores * non_train_items
 
         _, test_indices = torch.topk(scores, dim=1, k=max(Ks))
         pred_items = torch.zeros_like(scores).float()
-        pred_items.scatter_(dim=1,index=test_indices,src=torch.tensor(1.0).cuda())
+        pred_items.scatter_(dim=1, index=test_indices, src=torch.tensor(1.0).cuda())
 
         for k in Ks:
             topk_preds = torch.zeros_like(scores).float()
-            topk_preds.scatter_(dim=1,index=test_indices[:, :k],src=torch.tensor(1.0))
+            topk_preds.scatter_(dim=1, index=test_indices[:, :k], src=torch.tensor(1.0))
 
             TP = (test_items * topk_preds).sum(1)
-            prec = TP/k
-            rec = TP/test_items.sum(1)
+            prec = TP / k
+            rec = TP / test_items.sum(1)
             hit_r = (TP > 0).float()
             ndcg = ndcg_at_k_gpu(pred_items, test_items, test_indices, k)
 
@@ -214,16 +228,16 @@ def test_GPU(u_emb, i_emb, Rtr, Rte, Ks):
             fold_ndcg[k].append(ndcg)
             fold_hr[k].append(hit_r)
 
-    result = {'precision': [], 'recall': [], 'ndcg': [], 'hit_ratio': []}
+    result = {"precision": [], "recall": [], "ndcg": [], "hit_ratio": []}
     for k in Ks:
-        result['precision'].append(torch.cat(fold_prec[k]).mean())
-        result['recall'].append(torch.cat(fold_rec[k]).mean())
-        result['ndcg'].append(torch.cat(fold_ndcg[k]).mean())
-        result['hit_ratio'].append(torch.cat(fold_hr[k]).mean())
+        result["precision"].append(torch.cat(fold_prec[k]).mean())
+        result["recall"].append(torch.cat(fold_rec[k]).mean())
+        result["ndcg"].append(torch.cat(fold_ndcg[k]).mean())
+        result["hit_ratio"].append(torch.cat(fold_hr[k]).mean())
     return result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     args = parse_args()
     data_dir = args.data_dir
@@ -234,7 +248,7 @@ if __name__ == '__main__':
     emb_dim = args.emb_dim
     lr = args.lr
     reg = args.reg
-    mess_dropout = [args.mess_dropout]*len(layers)
+    mess_dropout = [args.mess_dropout] * len(layers)
     node_dropout = args.node_dropout
     # n_folds for the adjacency matrix
     n_fold = args.n_fold
@@ -245,34 +259,53 @@ if __name__ == '__main__':
     data_generator = Data(path=data_dir + dataset, batch_size=batch_size)
     plain_adj, norm_adj, mean_adj = data_generator.get_adj_mat()
 
-    if adj_type == 'plain':
+    if adj_type == "plain":
         adj_mtx = plain_adj
-    elif adj_type == 'norm':
+    elif adj_type == "norm":
         adj_mtx = norm_adj
-    elif adj_type == 'gcmc':
+    elif adj_type == "gcmc":
         adj_mtx = mean_adj
     else:
         adj_mtx = mean_adj + sp.eye(mean_adj.shape[0])
 
-    modelfname =  args.model.lower() + \
-        "_adj_" + args.adj_type + \
-        "_opt_" + args.optimizer + \
-        "_nemb_" + str(emb_dim) + \
-        "_layers_" + re.sub(" ", "", str(layers)) + \
-        "_messdr_" + str(args.mess_dropout).split(".")[1] + \
-        "_reg_" + str(reg).split(".")[1] + \
-        "_lr_"  + str(args.lr).split(".")[1] + \
-        "_lrs_" + str(args.lr_scheduler) + \
-        ".pt"
+    modelfname = (
+        args.model.lower()
+        + "_adj_"
+        + args.adj_type
+        + "_opt_"
+        + args.optimizer
+        + "_nemb_"
+        + str(emb_dim)
+        + "_layers_"
+        + re.sub(" ", "", str(layers))
+        + "_messdr_"
+        + str(args.mess_dropout).split(".")[1]
+        + "_reg_"
+        + str(reg).split(".")[1]
+        + "_lr_"
+        + str(args.lr).split(".")[1]
+        + "_lrs_"
+        + str(args.lr_scheduler)
+        + ".pt"
+    )
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
     model_weights = os.path.join(args.results_dir, modelfname)
-    results_tab = os.path.join(args.results_dir, 'results_df.csv')
+    results_tab = os.path.join(args.results_dir, "results_df.csv")
 
-    if args.model.lower() == 'ngcf':
-        model = NGCF(data_generator.n_users, data_generator.n_items, emb_dim, layers, reg,
-            node_dropout, mess_dropout, adj_mtx, n_fold)
-    elif args.model.lower() == 'bpr':
+    if args.model.lower() == "ngcf":
+        model = NGCF(
+            data_generator.n_users,
+            data_generator.n_items,
+            emb_dim,
+            layers,
+            reg,
+            node_dropout,
+            mess_dropout,
+            adj_mtx,
+            n_fold,
+        )
+    elif args.model.lower() == "bpr":
         model = BPR(data_generator.n_users, data_generator.n_items, emb_dim, reg)
 
     if use_cuda:
@@ -282,50 +315,68 @@ if __name__ == '__main__':
         assert os.path.isfile(model_weights)
         model.load_state_dict(torch.load(model_weights))
         print("Computing metrics with pretrained weights")
-        if args.test_with == 'cpu':
+        if args.test_with == "cpu":
             users_to_test = list(data_generator.test_set.keys())
             res = test_CPU(model, users_to_test)
-        elif args.test_with == 'gpu':
+        elif args.test_with == "gpu":
             res = test_GPU(
                 model.u_g_embeddings.detach(),
                 model.i_g_embeddings.detach(),
                 data_generator.Rtr,
                 data_generator.Rte,
-                Ks)
-        print(
-            "Pretrained model", "\n",
-            "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
-            "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
-            "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
-            "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
+                Ks,
             )
-        cur_best_metric = res['recall'][0]
+        print(
+            "Pretrained model",
+            "\n",
+            "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(
+                Ks[0], res["recall"][0], Ks[-1], res["recall"][-1]
+            ),
+            "\n",
+            "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(
+                Ks[0], res["precision"][0], Ks[-1], res["precision"][-1]
+            ),
+            "\n",
+            "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(
+                Ks[0], res["hit_ratio"][0], Ks[-1], res["hit_ratio"][-1]
+            ),
+            "\n",
+            "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(
+                Ks[0], res["ndcg"][0], Ks[-1], res["ndcg"][-1]
+            ),
+        )
+        cur_best_metric = res["recall"][0]
     elif args.pretrain == -1:
         assert os.path.isfile(model_weights)
         state_dict = torch.load(model_weights)
-        model.u_embeddings = torch.nn.Parameter(state_dict['u_embeddings'])
-        model.i_embeddings = torch.nn.Parameter(state_dict['i_embeddings'])
-        cur_best_metric = 0.
+        model.u_embeddings = torch.nn.Parameter(state_dict["u_embeddings"])
+        model.i_embeddings = torch.nn.Parameter(state_dict["i_embeddings"])
+        cur_best_metric = 0.0
     else:
-        cur_best_metric = 0.
+        cur_best_metric = 0.0
 
-    if args.optimizer.lower() == 'adam':
+    if args.optimizer.lower() == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    elif args.optimizer.lower() == 'adamw':
+    elif args.optimizer.lower() == "adamw":
         optimizer = AdamW(model.parameters(), lr=args.lr)
-    elif args.optimizer.lower() == 'radam':
+    elif args.optimizer.lower() == "radam":
         optimizer = RAdam(model.parameters(), lr=args.lr)
 
-    training_steps = (data_generator.n_train//batch_size)+1
-    step_size = training_steps*(args.n_epochs//4) # 2 cycles
-    if args.lr_scheduler.lower() == 'reducelronplateau':
+    training_steps = (data_generator.n_train // batch_size) + 1
+    step_size = training_steps * (args.n_epochs // 4)  # 2 cycles
+    if args.lr_scheduler.lower() == "reducelronplateau":
         # this will be run within evaluation. Given that we evaluate every
         # "eval_every" epochs (normally 5), the patience of the scheduler
         # should consider that. For example: patience=2 -> 2*5 = 10 epochs
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', patience=2)
-    elif args.lr_scheduler.lower() == 'cycliclr':
-        scheduler = CyclicLR(optimizer, step_size_up=step_size, base_lr=lr/10., max_lr=lr*3,
-            cycle_momentum=False)
+        scheduler = ReduceLROnPlateau(optimizer, mode="max", patience=2)
+    elif args.lr_scheduler.lower() == "cycliclr":
+        scheduler = CyclicLR(
+            optimizer,
+            step_size_up=step_size,
+            base_lr=lr / 10.0,
+            max_lr=lr * 3,
+            cycle_momentum=False,
+        )
     else:
         scheduler = None
 
@@ -335,42 +386,57 @@ if __name__ == '__main__':
         t1 = time()
         loss = train(model, data_generator, optimizer, scheduler)
 
-        if epoch % args.print_every  == (args.print_every - 1):
-            print("Epoch:{} {:.2f}s, Loss = {:.4f}".
-                format(epoch, time()-t1, loss))
+        if epoch % args.print_every == (args.print_every - 1):
+            print("Epoch:{} {:.2f}s, Loss = {:.4f}".format(epoch, time() - t1, loss))
 
-        if epoch % args.eval_every  == (args.eval_every - 1):
+        if epoch % args.eval_every == (args.eval_every - 1):
             with torch.no_grad():
-                if args.test_with == 'cpu':
+                if args.test_with == "cpu":
                     t2 = time()
                     users_to_test = list(data_generator.test_set.keys())
                     res = test_CPU(model, users_to_test)
-                if args.test_with == 'gpu':
+                if args.test_with == "gpu":
                     t2 = time()
                     res = test_GPU(
                         model.u_g_embeddings.detach(),
                         model.i_g_embeddings.detach(),
                         data_generator.Rtr,
                         data_generator.Rte,
-                        Ks)
+                        Ks,
+                    )
 
             print(
-                "VALIDATION:","\n",
-                "Epoch: {}, {:.2f}s".format(epoch, time()-t2),"\n",
-                "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(Ks[0], res['recall'][0],  Ks[-1], res['recall'][-1]), "\n",
-                "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(Ks[0], res['precision'][0],  Ks[-1], res['precision'][-1]), "\n",
-                "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(Ks[0], res['hit_ratio'][0],  Ks[-1], res['hit_ratio'][-1]), "\n",
-                "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(Ks[0], res['ndcg'][0],  Ks[-1], res['ndcg'][-1])
-                )
+                "VALIDATION:",
+                "\n",
+                "Epoch: {}, {:.2f}s".format(epoch, time() - t2),
+                "\n",
+                "Recall@{}: {:.4f}, Recall@{}: {:.4f}".format(
+                    Ks[0], res["recall"][0], Ks[-1], res["recall"][-1]
+                ),
+                "\n",
+                "Precision@{}: {:.4f}, Precision@{}: {:.4f}".format(
+                    Ks[0], res["precision"][0], Ks[-1], res["precision"][-1]
+                ),
+                "\n",
+                "Hit_ratio@{}: {:.4f}, Hit_ratio@{}: {:.4f}".format(
+                    Ks[0], res["hit_ratio"][0], Ks[-1], res["hit_ratio"][-1]
+                ),
+                "\n",
+                "NDCG@{}: {:.4f}, NDCG@{}: {:.4f}".format(
+                    Ks[0], res["ndcg"][0], Ks[-1], res["ndcg"][-1]
+                ),
+            )
 
-            log_value = res['recall'][0]
-            cur_best_metric, stopping_step, should_stop = \
-            early_stopping(log_value, cur_best_metric, stopping_step, args.patience)
+            log_value = res["recall"][0]
+            cur_best_metric, stopping_step, should_stop = early_stopping(
+                log_value, cur_best_metric, stopping_step, args.patience
+            )
 
             if isinstance(scheduler, ReduceLROnPlateau):
                 scheduler.step(log_value)
 
-        if should_stop == True: break
+        if should_stop == True:
+            break
 
         if (stopping_step == 0) & (args.save_results):
             torch.save(model.state_dict(), model_weights)
@@ -382,10 +448,10 @@ if __name__ == '__main__':
     if args.save_results:
         cols, vals = [], []
         for m in final_res.keys():
-            for i,k in enumerate(Ks):
-                cols.append(m+'@'+str(k))
+            for i, k in enumerate(Ks):
+                cols.append(m + "@" + str(k))
                 vals.append(final_res[m][i].cpu().numpy())
-        cols = ['modelname', 'loss', 'epoch'] + cols
+        cols = ["modelname", "loss", "epoch"] + cols
         vals = [modelfname, final_loss, current_epoch] + vals
         if not os.path.isfile(results_tab):
             results_df = pd.DataFrame(columns=cols)
