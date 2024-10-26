@@ -13,6 +13,7 @@ __pycache__*
 # data related dirs
 datasets/
 data/
+processed_data/
 Data/
 model_weights/
 results/

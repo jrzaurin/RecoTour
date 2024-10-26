@@ -1,5 +1,5 @@
-from typing import Dict, Optional
 from pathlib import Path
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -21,9 +21,9 @@ def read_amazon_reviews(
 class MovieLensReader:
 
     COLUMN_NAMES = {
-        "movies": ["movieId", "title", "genres"],
-        "ratings": ["userId", "movieId", "rating", "timestamp"],
-        "users": ["userId", "gender", "age", "occupation", "zipcode"],
+        "movies": ["item_id", "title", "genres"],
+        "ratings": ["user_id", "item_id", "rating", "timestamp"],
+        "users": ["user_id", "gender", "age", "occupation", "zipcode"],
     }
     SAVE_FILENAME = "movielens_ratings_with_info.csv"
 
@@ -54,8 +54,8 @@ class MovieLensReader:
         ratings = self.read_dat_file("ratings")
         movies = self.read_dat_file("movies")
         users = self.read_dat_file("users")
-        full_data = ratings.merge(movies, on="movieId", how="left").merge(
-            users, on="userId", how="left"
+        full_data = ratings.merge(movies, on="item_id", how="left").merge(
+            users, on="user_id", how="left"
         )
         full_data.to_csv(self.data_dir / self.SAVE_FILENAME, index=False)
         print(f"File {self.SAVE_FILENAME} saved in {self.data_dir}")
