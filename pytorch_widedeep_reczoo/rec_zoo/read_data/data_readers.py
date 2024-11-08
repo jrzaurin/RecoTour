@@ -9,8 +9,8 @@
 # python rec_zoo/read_data/data_readers.py
 # -----------------------------------------------------------------------------
 
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
 
 import pandas as pd
 

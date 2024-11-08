@@ -5,9 +5,9 @@ import pandas as pd
 import pytest
 
 from rec_zoo.split_data.data_splitters import (
+    TemporalSplitter,
     LastInteractionSequenceSplitter,
     LastPositiveInteractionSplitter,
-    TemporalSplitter,
 )
 
 
@@ -74,6 +74,7 @@ def test_last_positive_interaction_splitter(sample_data, sample_column):
         data_path=sample_data,
         user_column="user_id",
         item_column="item_id",
+        item_feat_columns=["category"],
         time_column="timestamp",
         dataset="movielens",
         sample_column=sample_column,
@@ -110,6 +111,57 @@ def test_last_positive_interaction_splitter(sample_data, sample_column):
     ["train_val_test_splits/movielens_splits/full_train.csv"],
     indirect=True,
 )
+def test_last_positive_interaction_splitter_val(sample_data):
+    # Initialize splitter
+    splitter = LastPositiveInteractionSplitter(
+        user_column="user_id",
+        item_column="item_id",
+        item_feat_columns=["category"],
+        time_column="timestamp",
+        dataset="movielens",
+        n_negatives=2,
+        target_column="rating",
+        positive_target=5,
+    )
+
+    # Split data
+    train, val = splitter.split()
+
+    # Assertions
+    assert len(val) == 12  # 4 users * 3 interactions (1 positive + 2 negative)
+
+    # Check positive interactions in val set
+    positive_vals = val[val["rating"] == 5]
+    assert len(positive_vals) == 4
+
+    # Check negative interactions in val set
+    negative_vals = val[val["rating"] == 0]
+    assert len(negative_vals) == 8  # 2 negative samples per user
+
+    # Verify data integrity
+    original_data = pd.read_csv(sample_data)
+    assert set(train.columns) == set(original_data.columns)
+    assert set(val.columns) == set(original_data.columns)
+
+    # Verify files were saved
+    splits_dir = Path("train_val_test_splits") / "lpi_movielens_splits"
+    assert (splits_dir / "train.csv").exists()
+    assert (splits_dir / "val.csv").exists()
+
+    # check that per user id, no negative (0) interaction in the val set is
+    # in the train set
+    for user_id in val["user_id"].unique():
+        user_train = train[train["user_id"] == user_id]
+        user_val = val[val["user_id"] == user_id]
+        for item_id in user_val["item_id"].values:
+            assert item_id not in user_train["item_id"].values
+
+
+@pytest.mark.parametrize(
+    "sample_data",
+    ["train_val_test_splits/movielens_splits/full_train.csv"],
+    indirect=True,
+)
 def test_temporal_splitter(sample_data):
     # Initialize splitter
     splitter = TemporalSplitter(
@@ -136,7 +188,7 @@ def test_temporal_splitter(sample_data):
     assert set(val.columns) == set(original_data.columns)
 
     # Verify files were saved
-    splits_dir = Path("train_val_test_splits") / "movielens_splits"
+    splits_dir = Path("train_val_test_splits") / "ts_movielens_splits"
     assert (splits_dir / "train.csv").exists()
     assert (splits_dir / "val.csv").exists()
 
@@ -184,6 +236,6 @@ def test_last_interaction_sequence_splitter(sample_data):
         )
 
     # Verify files were saved
-    splits_dir = Path("train_val_test_splits") / "movielens_splits"
+    splits_dir = Path("train_val_test_splits") / "lis_movielens_splits"
     assert (splits_dir / "train.csv").exists()
     assert (splits_dir / "val.csv").exists()

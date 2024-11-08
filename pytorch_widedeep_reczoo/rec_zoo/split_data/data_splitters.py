@@ -1,9 +1,10 @@
 import random
 from abc import ABC, abstractmethod
+from typing import List, Tuple, Literal, Optional
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
 
 import pandas as pd
+from tqdm import tqdm
 
 
 class BaseDataSplitter(ABC):
@@ -21,6 +22,8 @@ class BaseDataSplitter(ABC):
             Name of the column containing item IDs
         val_filename (str, optional):
             Name of the validation file. Defaults to "val.csv"
+        split_prefix (str, optional):
+            Prefix to add to the save path. Defaults to ""
     """
 
     def __init__(
@@ -28,13 +31,18 @@ class BaseDataSplitter(ABC):
         dataset: Literal["movielens", "amazon"],
         user_column: str,
         item_column: str,
+        train_filename: str = "train.csv",
         val_filename: str = "val.csv",
+        split_prefix: str = "",
     ):
         self.dataset = dataset
         self.user_column = user_column
         self.item_column = item_column
         self.root_dir = Path("train_val_test_splits")
-        self.save_path = self.root_dir / f"{dataset}_splits"
+        self.read_path = self.root_dir / f"{dataset}_splits"
+        prefix = f"{split_prefix}_" if split_prefix else ""
+        self.save_path = self.root_dir / f"{prefix}{dataset}_splits"
+        self.train_filename = train_filename
         self.val_filename = val_filename
 
     def _ensure_save_path(self):
@@ -42,11 +50,11 @@ class BaseDataSplitter(ABC):
             self.save_path.mkdir(parents=True, exist_ok=True)
 
     def _load_data(self, filename: str) -> pd.DataFrame:
-        return pd.read_csv(self.save_path / filename)
+        return pd.read_csv(self.read_path / filename)
 
     def _save_splits(self, train: pd.DataFrame, val: pd.DataFrame):
         self._ensure_save_path()
-        train.to_csv(self.save_path / "train.csv", index=False)
+        train.to_csv(self.save_path / self.train_filename, index=False)
         val.to_csv(self.save_path / self.val_filename, index=False)
 
     @abstractmethod
@@ -57,8 +65,8 @@ class BaseDataSplitter(ABC):
 class LastPositiveInteractionSplitter(BaseDataSplitter):
     """Creates the master train/test split for the recommendation dataset.
 
-    This is typically the first splitter to be used in the data preparation
-    pipeline. It creates two datasets:
+    This is the first splitter to be used in the data preparation pipeline. It
+    creates two datasets:
 
     1. A test set (saved as 'test.csv'): Contains the last positive
     interaction for each user, along with N negative samples. This set should
@@ -70,8 +78,9 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
     The workflow should be:
 
     1. Use this splitter first to create the master test set
-    2. Use other splitters (TemporalSplitter, LastInteractionSequenceSplitter)
-    on the 'full_train.csv' to create train/validation splits for model
+    2. Use it again (with the appropiate params), or the other splitters
+    (TemporalSplitter, LastInteractionSequenceSplitter) on
+    the 'full_train.csv' to create train/validation splits for model
     development.
 
     Args:
@@ -97,17 +106,29 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
 
     def __init__(
         self,
-        data_path: str,
         user_column: str,
         item_column: str,
         time_column: str,
+        item_feat_columns: List[str],
         dataset: Literal["movielens", "amazon"],
+        data_path: Optional[str] = None,
         n_negatives: int = 9,
         sample_column: Optional[str] = None,
         target_column: str = "rating",
         positive_target: int = 5,
     ):
-        super().__init__(dataset, user_column, item_column, val_filename="test.csv")
+        train_filename = "full_train.csv" if data_path else "train.csv"
+        val_filename = "test.csv" if data_path else "val.csv"
+        split_prefix = "" if data_path else "lpi"
+        super().__init__(
+            dataset,
+            user_column,
+            item_column,
+            train_filename=train_filename,
+            val_filename=val_filename,
+            split_prefix=split_prefix,
+        )
+        self.item_feat_columns = item_feat_columns
         self.data_path = data_path
         self.time_column = time_column
         self.n_negatives = n_negatives
@@ -116,7 +137,11 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
         self.positive_target = positive_target
 
     def split(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        data = pd.read_csv(self.data_path)
+        if self.data_path:
+            data = pd.read_csv(self.data_path)
+        else:
+            data = self._load_data("full_train.csv")
+
         data = data.sort_values([self.user_column, self.time_column]).reset_index(
             drop=True
         )
@@ -125,15 +150,27 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
         test_data: List[pd.Series] = []
         train_data: List[pd.DataFrame] = []
 
-        for user in users:
+        for user in tqdm(users, desc=f"Processing users for LPI ({len(users)} users)"):
             user_data = data[data[self.user_column] == user]
 
-            last_interaction = user_data[
+            if user_data.empty:
+                continue
+
+            # Get all positive interactions for the user
+            positive_interactions = user_data[
                 user_data[self.target_column] == self.positive_target
-            ].iloc[-1]
+            ]
+
+            # If user has no positive interactions, add all their data to training
+            if len(positive_interactions) == 0:
+                train_data.append(user_data)
+                continue
+
+            # Original logic for users with positive interactions
+            last_interaction = positive_interactions.iloc[-1]
             last_interaction_idx = last_interaction.name
 
-            test_data.append(last_interaction)
+            # test_data.append(pd.DataFrame(last_interaction))
             user_data_wo_last_interaction = user_data.drop(index=last_interaction_idx)
             train_data.append(user_data_wo_last_interaction)
 
@@ -158,13 +195,33 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
                 unseen_items, min(self.n_negatives, len(unseen_items))
             )
 
-            for neg_item in negative_items:
-                negative_interaction = last_interaction.copy()
-                negative_interaction[self.item_column] = neg_item
-                negative_interaction[self.target_column] = 0
-                test_data.append(negative_interaction)
+            # Create negative samples dataframe
+            negative_items_data = (
+                data[data[self.item_column].isin(negative_items)]
+                .loc[:, [self.item_column] + self.item_feat_columns]
+                .drop_duplicates()
+                .assign(**{self.target_column: 0})
+            )
 
-        test = pd.DataFrame(test_data).reset_index(drop=True)
+            # Copy all other columns from the last interaction
+            cols_to_copy = [
+                col
+                for col in data.columns
+                if col
+                not in {self.item_column, self.target_column, *self.item_feat_columns}
+            ]
+            negative_items_data[cols_to_copy] = last_interaction[cols_to_copy].values
+
+            # Create a single-row DataFrame from the last interaction
+            positive_sample = pd.DataFrame([last_interaction.to_dict()])
+
+            user_id_test_data = pd.concat(
+                [positive_sample, negative_items_data],
+                ignore_index=True,
+            )
+            test_data.append(user_id_test_data)
+
+        test = pd.concat(test_data, ignore_index=True)
         train = pd.concat(train_data, ignore_index=True)
 
         self._save_splits(train, test)
@@ -199,7 +256,12 @@ class TemporalSplitter(BaseDataSplitter):
         time_column: str,
         train_size: float = 0.8,
     ):
-        super().__init__(dataset, user_column, item_column)
+        super().__init__(
+            dataset,
+            user_column,
+            item_column,
+            split_prefix="ts",
+        )
         self.time_column = time_column
         self.train_size = train_size
 
@@ -249,7 +311,12 @@ class LastInteractionSequenceSplitter(BaseDataSplitter):
         rating_column: str,
         sequence_length: int = 5,
     ):
-        super().__init__(dataset, user_column, item_column)
+        super().__init__(
+            dataset,
+            user_column,
+            item_column,
+            split_prefix="lis",
+        )
         self.time_column = time_column
         self.rating_column = rating_column
         self.sequence_length = sequence_length
@@ -263,7 +330,7 @@ class LastInteractionSequenceSplitter(BaseDataSplitter):
 
         train_data, val_data = [], []
 
-        for user in users:
+        for user in tqdm(users, desc=f"Processing users for LIS ({len(users)} users)"):
             user_data = full_train[full_train[self.user_column] == user]
             n_interactions = len(user_data)
 
@@ -329,6 +396,34 @@ class LastInteractionSequenceSplitter(BaseDataSplitter):
 
 
 if __name__ == "__main__":
+
+    last_positive_interaction_splitter = LastPositiveInteractionSplitter(
+        user_column="user_id",
+        item_column="item_id",
+        time_column="timestamp",
+        item_feat_columns=["title", "genres"],
+        dataset="movielens",
+        data_path="data/ml-1m/movielens_ratings_with_info.csv",
+    )
+    full_train, test = last_positive_interaction_splitter.split()
+
+    last_positive_interaction_splitter_val = LastPositiveInteractionSplitter(
+        user_column="user_id",
+        item_column="item_id",
+        time_column="timestamp",
+        item_feat_columns=["title", "genres"],
+        dataset="movielens",
+    )
+    lpi_train, lpi_val = last_positive_interaction_splitter_val.split()
+
+    temporal_splitter = TemporalSplitter(
+        dataset="movielens",
+        user_column="user_id",
+        item_column="item_id",
+        time_column="timestamp",
+    )
+    t_train, t_val = temporal_splitter.split()
+
     last_interaction_sequence_splitter = LastInteractionSequenceSplitter(
         dataset="movielens",
         user_column="user_id",
@@ -337,26 +432,4 @@ if __name__ == "__main__":
         rating_column="rating",
         sequence_length=5,
     )
-    last_interaction_sequence_splitter.split()
-
-    temporal_splitter = TemporalSplitter(
-        dataset="movielens",
-        user_column="user_id",
-        item_column="item_id",
-        time_column="timestamp",
-        train_size=0.8,
-    )
-    temporal_splitter.split()
-
-    last_positive_interaction_splitter = LastPositiveInteractionSplitter(
-        data_path="movielens",
-        user_column="user_id",
-        item_column="item_id",
-        time_column="timestamp",
-        dataset="movielens",
-        n_negatives=9,
-        sample_column="category",
-        target_column="rating",
-        positive_target=5,
-    )
-    last_positive_interaction_splitter.split()
+    lis_train, lis_val = last_interaction_sequence_splitter.split()
