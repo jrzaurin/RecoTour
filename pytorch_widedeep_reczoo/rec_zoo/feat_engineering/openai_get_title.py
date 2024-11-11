@@ -3,21 +3,29 @@ import asyncio
 from typing import Dict, List
 
 from openai import AsyncOpenAI
+from tqdm.asyncio import tqdm
 
 from rec_zoo.tokens_and_api_keys import OPENAI_API_KEY
 
 
-async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str]:
+async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | float]:
     client = AsyncOpenAI(api_key=api_key)
 
     prompt = f"""
-    For the movie "{title}", provide a few-sentences-overview and runtime in
-    minutes. Do not include the title of the movie in the overview. If you
-    are unable to find the movie, or are unsure of the details, please leave
-    the fields empty.
+    For the movie "{title}", provide an overview of a few sentences and its
+    runtime in minutes.
 
+    - Do not include the title of the movie in the overview.
+    - If you are unable to find the movie, or are unsure of the details,
+      please leave the overview empty and the runtime as 0.0.
+
+    # Output Format
     Return ONLY a JSON object with this exact format:
-    {{"overview": "description here", "runtime": "XXX minutes"}}
+
+    {{"overview": "description here", "runtime": "XXX"}}
+
+    if information is not found:
+    {{"overview": "", "runtime": 0.0}}
     """
 
     try:
@@ -40,7 +48,7 @@ async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str]:
 
     except Exception as e:
         print(f"Error getting movie details for {title}: {str(e)}")
-        return {"overview": "", "runtime": ""}
+        return {"overview": "", "runtime": 0.0}
 
 
 async def process_movies_concurrent(
@@ -53,7 +61,7 @@ async def process_movies_concurrent(
             return await get_movie_details_async(title, api_key)
 
     tasks = [bounded_get_details(title) for title in titles]
-    return await asyncio.gather(*tasks)
+    return await tqdm.gather(*tasks, desc="Processing movies")
 
 
 # Example usage
