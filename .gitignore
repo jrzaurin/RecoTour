@@ -35,3 +35,5 @@ sftp*-config_cpu.json
 
 #mypy
 .mypy_cache
+
+tokens_and_api_keys.py
