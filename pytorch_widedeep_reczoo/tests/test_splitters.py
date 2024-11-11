@@ -6,9 +6,18 @@ import pytest
 
 from rec_zoo.split_data.data_splitters import (
     TemporalSplitter,
+    LastInteractionSplitter,
     LastInteractionSequenceSplitter,
-    LastPositiveInteractionSplitter,
+    LastPositiveInteractionWithNegativeSamplesSplitter,
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_after_all_tests():
+    yield
+    splits_dir = Path("tests/train_val_test_splits")
+    if splits_dir.exists():
+        shutil.rmtree(splits_dir)
 
 
 @pytest.fixture
@@ -45,32 +54,21 @@ def sample_data(tmp_path, request):
         }
     )
 
-    # Get the save_path parameter, default to tmp_path
-    save_path = getattr(request, "param", None)
-
-    if save_path:
-        # If save_path is specified, save to train_val_test_splits/{dataset}_splits/full_train.csv
-        save_dir = Path(save_path).parent
-        save_dir.mkdir(parents=True, exist_ok=True)
-        data.to_csv(save_path, index=False)
-        data_path = save_path
-    else:
-        # Original behavior: save to tmp_path
-        data_path = tmp_path / "test_data.csv"
-        data.to_csv(data_path, index=False)
+    # Save data to temporary directory structure
+    test_dir = tmp_path / "train_val_test_splits" / "movielens_splits"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    data_path = test_dir / "full_train.csv"
+    data.to_csv(data_path, index=False)
 
     yield str(data_path)
 
-    # cleanup
-    splits_dir = Path("train_val_test_splits")
-    if splits_dir.exists():
-        shutil.rmtree(splits_dir)
+    # No cleanup needed as tmp_path is automatically cleaned up by pytest
 
 
 @pytest.mark.parametrize("sample_column", ["category", None])
-def test_last_positive_interaction_splitter(sample_data, sample_column):
+def test_last_positive_interaction_splitter(sample_data, tmp_path, sample_column):
     # Initialize splitter
-    splitter = LastPositiveInteractionSplitter(
+    splitter = LastPositiveInteractionWithNegativeSamplesSplitter(
         data_path=sample_data,
         user_column="user_id",
         item_column="item_id",
@@ -82,6 +80,11 @@ def test_last_positive_interaction_splitter(sample_data, sample_column):
         target_column="rating",
         positive_target=5,
     )
+
+    # Override paths
+    splitter.root_dir = tmp_path / "train_val_test_splits"
+    splitter.read_path = splitter.root_dir / "movielens_splits"
+    splitter.save_path = splitter.root_dir / "lpi_movielens_splits"
 
     # Split data
     train, test = splitter.split()
@@ -111,9 +114,9 @@ def test_last_positive_interaction_splitter(sample_data, sample_column):
     ["train_val_test_splits/movielens_splits/full_train.csv"],
     indirect=True,
 )
-def test_last_positive_interaction_splitter_val(sample_data):
+def test_last_positive_interaction_splitter_val(sample_data, tmp_path):
     # Initialize splitter
-    splitter = LastPositiveInteractionSplitter(
+    splitter = LastPositiveInteractionWithNegativeSamplesSplitter(
         user_column="user_id",
         item_column="item_id",
         item_feat_columns=["category"],
@@ -123,6 +126,11 @@ def test_last_positive_interaction_splitter_val(sample_data):
         target_column="rating",
         positive_target=5,
     )
+
+    # Override the root_dir to use tmp_path
+    splitter.root_dir = tmp_path / "train_val_test_splits"
+    splitter.read_path = splitter.root_dir / "movielens_splits"
+    splitter.save_path = splitter.root_dir / "lpi_movielens_splits"
 
     # Split data
     train, val = splitter.split()
@@ -143,8 +151,8 @@ def test_last_positive_interaction_splitter_val(sample_data):
     assert set(train.columns) == set(original_data.columns)
     assert set(val.columns) == set(original_data.columns)
 
-    # Verify files were saved
-    splits_dir = Path("train_val_test_splits") / "lpi_movielens_splits"
+    # Verify files were saved in the temporary directory
+    splits_dir = tmp_path / "train_val_test_splits" / "lpi_movielens_splits"
     assert (splits_dir / "train.csv").exists()
     assert (splits_dir / "val.csv").exists()
 
@@ -162,7 +170,7 @@ def test_last_positive_interaction_splitter_val(sample_data):
     ["train_val_test_splits/movielens_splits/full_train.csv"],
     indirect=True,
 )
-def test_temporal_splitter(sample_data):
+def test_temporal_splitter(sample_data, tmp_path):
     # Initialize splitter
     splitter = TemporalSplitter(
         dataset="movielens",
@@ -171,6 +179,11 @@ def test_temporal_splitter(sample_data):
         time_column="timestamp",
         train_size=0.6,
     )
+
+    # Override paths
+    splitter.root_dir = tmp_path / "train_val_test_splits"
+    splitter.read_path = splitter.root_dir / "movielens_splits"
+    splitter.save_path = splitter.root_dir / "ts_movielens_splits"
 
     # Perform split
     train, val = splitter.split()
@@ -187,8 +200,8 @@ def test_temporal_splitter(sample_data):
     assert set(train.columns) == set(original_data.columns)
     assert set(val.columns) == set(original_data.columns)
 
-    # Verify files were saved
-    splits_dir = Path("train_val_test_splits") / "ts_movielens_splits"
+    # Verify files were saved in the temporary directory
+    splits_dir = tmp_path / "train_val_test_splits" / "ts_movielens_splits"
     assert (splits_dir / "train.csv").exists()
     assert (splits_dir / "val.csv").exists()
 
@@ -198,7 +211,7 @@ def test_temporal_splitter(sample_data):
     ["train_val_test_splits/movielens_splits/full_train.csv"],
     indirect=True,
 )
-def test_last_interaction_sequence_splitter(sample_data):
+def test_last_interaction_sequence_splitter(sample_data, tmp_path):
     # Initialize splitter
     splitter = LastInteractionSequenceSplitter(
         dataset="movielens",
@@ -208,6 +221,11 @@ def test_last_interaction_sequence_splitter(sample_data):
         rating_column="rating",
         sequence_length=3,
     )
+
+    # Override paths
+    splitter.root_dir = tmp_path / "train_val_test_splits"
+    splitter.read_path = splitter.root_dir / "movielens_splits"
+    splitter.save_path = splitter.root_dir / "lis_movielens_splits"
 
     # Perform split
     train, val = splitter.split()
@@ -235,7 +253,45 @@ def test_last_interaction_sequence_splitter(sample_data):
             == user_data["rating"].iloc[-1]
         )
 
-    # Verify files were saved
-    splits_dir = Path("train_val_test_splits") / "lis_movielens_splits"
+    # Verify files were saved in the temporary directory
+    splits_dir = tmp_path / "train_val_test_splits" / "lis_movielens_splits"
+    assert (splits_dir / "train.csv").exists()
+    assert (splits_dir / "val.csv").exists()
+
+
+def test_last_interaction_splitter(sample_data, tmp_path):
+    # Initialize splitter with the temporary directory
+    splitter = LastInteractionSplitter(
+        dataset="movielens",
+        user_column="user_id",
+        item_column="item_id",
+        time_column="timestamp",
+    )
+
+    # Temporarily override the root_dir to use tmp_path
+    splitter.root_dir = tmp_path / "train_val_test_splits"
+    splitter.read_path = splitter.root_dir / "movielens_splits"
+    splitter.save_path = splitter.root_dir / "li_movielens_splits"
+
+    # Perform split
+    train, val = splitter.split()
+
+    # Verify that each user has exactly one interaction in validation set
+    user_counts_val = val["user_id"].value_counts()
+    assert all(count == 1 for count in user_counts_val)
+
+    # Verify temporal ordering - last interaction per user is in validation
+    original_data = pd.read_csv(sample_data)
+    for user_id in val["user_id"].unique():
+        user_data = original_data[original_data["user_id"] == user_id]
+        user_val = val[val["user_id"] == user_id]
+        assert user_val.iloc[0]["timestamp"] == user_data["timestamp"].max()
+
+    # Verify data integrity
+    assert set(train.columns) == set(original_data.columns)
+    assert set(val.columns) == set(original_data.columns)
+
+    # Verify files were saved in the temporary directory
+    splits_dir = tmp_path / "train_val_test_splits" / "li_movielens_splits"
     assert (splits_dir / "train.csv").exists()
     assert (splits_dir / "val.csv").exists()

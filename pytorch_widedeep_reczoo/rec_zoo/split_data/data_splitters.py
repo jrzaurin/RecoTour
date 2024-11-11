@@ -62,7 +62,7 @@ class BaseDataSplitter(ABC):
         pass
 
 
-class LastPositiveInteractionSplitter(BaseDataSplitter):
+class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
     """Creates the master train/test split for the recommendation dataset.
 
     This is the first splitter to be used in the data preparation pipeline. It
@@ -152,71 +152,27 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
 
         for user in tqdm(users, desc=f"Processing users for LPI ({len(users)} users)"):
             user_data = data[data[self.user_column] == user]
-
             if user_data.empty:
                 continue
 
-            # Get all positive interactions for the user
             positive_interactions = user_data[
                 user_data[self.target_column] == self.positive_target
             ]
-
-            # If user has no positive interactions, add all their data to training
             if len(positive_interactions) == 0:
                 train_data.append(user_data)
                 continue
 
-            # Original logic for users with positive interactions
-            last_interaction = positive_interactions.iloc[-1]
-            last_interaction_idx = last_interaction.name
-
-            # test_data.append(pd.DataFrame(last_interaction))
-            user_data_wo_last_interaction = user_data.drop(index=last_interaction_idx)
+            last_positive_interaction, user_data_wo_last_interaction = (
+                self._split_user_data(user_data, positive_interactions)
+            )
             train_data.append(user_data_wo_last_interaction)
 
-            user_items = set(user_data[self.item_column])
-            all_items = set(data[self.item_column])
-            unseen_items = list(all_items - user_items)
-
-            if self.sample_column:
-                user_categories = set(user_data[self.sample_column])
-                unseen_items = [
-                    item
-                    for item in unseen_items
-                    if data[data[self.item_column] == item][self.sample_column].iloc[0]
-                    in user_categories
-                ]
-
-            # If not enough unseen items, fallback to all unseen items
-            if len(unseen_items) < self.n_negatives:
-                unseen_items = list(all_items - user_items)
-
-            negative_items = random.sample(
-                unseen_items, min(self.n_negatives, len(unseen_items))
+            negative_samples = self._generate_negative_samples(
+                data, user_data, last_positive_interaction
             )
-
-            # Create negative samples dataframe
-            negative_items_data = (
-                data[data[self.item_column].isin(negative_items)]
-                .loc[:, [self.item_column] + self.item_feat_columns]
-                .drop_duplicates()
-                .assign(**{self.target_column: 0})
-            )
-
-            # Copy all other columns from the last interaction
-            cols_to_copy = [
-                col
-                for col in data.columns
-                if col
-                not in {self.item_column, self.target_column, *self.item_feat_columns}
-            ]
-            negative_items_data[cols_to_copy] = last_interaction[cols_to_copy].values
-
-            # Create a single-row DataFrame from the last interaction
-            positive_sample = pd.DataFrame([last_interaction.to_dict()])
-
+            positive_sample = pd.DataFrame([last_positive_interaction.to_dict()])
             user_id_test_data = pd.concat(
-                [positive_sample, negative_items_data],
+                [positive_sample, negative_samples],
                 ignore_index=True,
             )
             test_data.append(user_id_test_data)
@@ -227,6 +183,117 @@ class LastPositiveInteractionSplitter(BaseDataSplitter):
         self._save_splits(train, test)
 
         return train, test
+
+    def _split_user_data(
+        self, user_data: pd.DataFrame, positive_interactions: pd.DataFrame
+    ) -> Tuple[pd.Series, pd.DataFrame]:
+        last_positive_interaction = positive_interactions.iloc[-1]
+        user_data_wo_last_interaction = user_data.drop(last_positive_interaction.name)
+        return last_positive_interaction, user_data_wo_last_interaction
+
+    def _generate_negative_samples(
+        self,
+        data: pd.DataFrame,
+        user_data: pd.DataFrame,
+        last_positive_interaction: pd.Series,
+    ) -> pd.DataFrame:
+        user_items = set(user_data[self.item_column])
+        all_items = set(data[self.item_column])
+        unseen_items = list(all_items - user_items)
+
+        if self.sample_column:
+            user_categories = set(user_data[self.sample_column])
+            unseen_items = [
+                item
+                for item in unseen_items
+                if data[data[self.item_column] == item][self.sample_column].iloc[0]
+                in user_categories
+            ]
+
+        if len(unseen_items) < self.n_negatives:
+            unseen_items = list(all_items - user_items)
+
+        negative_items = random.sample(
+            unseen_items, min(self.n_negatives, len(unseen_items))
+        )
+
+        negative_samples = (
+            data[data[self.item_column].isin(negative_items)]
+            .loc[:, [self.item_column] + self.item_feat_columns]
+            .drop_duplicates()
+            .assign(**{self.target_column: 0})
+        )
+
+        cols_to_copy = [
+            col
+            for col in data.columns
+            if col
+            not in {self.item_column, self.target_column, *self.item_feat_columns}
+        ]
+        negative_samples[cols_to_copy] = last_positive_interaction[cols_to_copy].values
+
+        return negative_samples
+
+
+class LastInteractionSplitter(BaseDataSplitter):
+    """Splits data into train and validation sets using the last interaction for validation.
+
+    This splitter uses all but the last interaction per user for training and
+    the last interaction for validation.
+
+    Args:
+        dataset (Literal["movielens", "amazon"]):
+            Name of the dataset
+        user_column (str):
+            Name of the column containing user IDs
+        item_column (str):
+            Name of the column containing item IDs
+        time_column (str):
+            Name of the column containing timestamps
+    """
+
+    def __init__(
+        self,
+        dataset: Literal["movielens", "amazon"],
+        user_column: str,
+        item_column: str,
+        time_column: str,
+    ):
+        super().__init__(
+            dataset,
+            user_column,
+            item_column,
+            split_prefix="li",
+        )
+        self.time_column = time_column
+
+    def split(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        full_train = self._load_data("full_train.csv")
+        full_train = full_train.sort_values(
+            [self.user_column, self.time_column]
+        ).reset_index(drop=True)
+        users = full_train[self.user_column].unique()
+
+        train_data, val_data = [], []
+
+        for user in tqdm(users, desc=f"Processing users for LI ({len(users)} users)"):
+            user_data = full_train[full_train[self.user_column] == user]
+
+            if user_data.empty:
+                continue
+
+            last_interaction = user_data.iloc[-1]
+            user_data_wo_last_interaction = user_data.iloc[:-1]
+
+            train_data.append(user_data_wo_last_interaction)
+            val_data.append(last_interaction)
+
+        train = pd.concat(train_data, ignore_index=True)
+        val = pd.DataFrame(val_data)
+
+        self._save_splits(train, val)
+
+        return train, val
 
 
 class TemporalSplitter(BaseDataSplitter):
@@ -397,24 +464,35 @@ class LastInteractionSequenceSplitter(BaseDataSplitter):
 
 if __name__ == "__main__":
 
-    last_positive_interaction_splitter = LastPositiveInteractionSplitter(
-        user_column="user_id",
-        item_column="item_id",
-        time_column="timestamp",
-        item_feat_columns=["title", "genres"],
-        dataset="movielens",
-        data_path="data/ml-1m/movielens_ratings_with_info.csv",
+    last_positive_interaction_splitter = (
+        LastPositiveInteractionWithNegativeSamplesSplitter(
+            user_column="user_id",
+            item_column="item_id",
+            time_column="timestamp",
+            item_feat_columns=["title", "genres"],
+            dataset="movielens",
+            data_path="data/ml-1m/movielens_ratings_with_info.csv",
+        )
     )
     full_train, test = last_positive_interaction_splitter.split()
 
-    last_positive_interaction_splitter_val = LastPositiveInteractionSplitter(
+    last_positive_interaction_splitter_val = (
+        LastPositiveInteractionWithNegativeSamplesSplitter(
+            user_column="user_id",
+            item_column="item_id",
+            time_column="timestamp",
+            item_feat_columns=["title", "genres"],
+            dataset="movielens",
+        )
+    )
+    lpi_train, lpi_val = last_positive_interaction_splitter_val.split()
+
+    last_interaction_splitter = LastInteractionSplitter(
+        dataset="movielens",
         user_column="user_id",
         item_column="item_id",
         time_column="timestamp",
-        item_feat_columns=["title", "genres"],
-        dataset="movielens",
     )
-    lpi_train, lpi_val = last_positive_interaction_splitter_val.split()
 
     temporal_splitter = TemporalSplitter(
         dataset="movielens",
