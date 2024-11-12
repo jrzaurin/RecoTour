@@ -65,9 +65,12 @@ class ItemDynamicFeatures:
             "rating_timespan_days",
         ]
 
+        features = features.reset_index()
+
         return features
 
-    def _compute_time_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _compute_time_features(df: pd.DataFrame) -> pd.DataFrame:
         """Compute time-based features for items."""
 
         time_features = []

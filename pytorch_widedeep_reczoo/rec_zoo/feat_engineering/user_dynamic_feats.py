@@ -1,13 +1,15 @@
 import numpy as np
 import pandas as pd
 
+from rec_zoo.feat_engineering.utils import save_objects
+
 
 class UserDynamicFeatures:
     """Computes dynamic features for users based on their interactions."""
 
-    def __init__(self):
-        """Initialize the UserDynamicFeatures class."""
-        pass
+    def __init__(self, save_dir: str | None = "feature_store"):
+
+        self.save_dir = save_dir
 
     def compute_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Compute all dynamic features for users."""
@@ -54,6 +56,11 @@ class UserDynamicFeatures:
             "favorite_genre",
             "unique_genres_count",
         ]
+
+        features = features.reset_index()
+
+        if self.save_dir is not None:
+            save_objects([features], ["user_dynamic_features.csv"], self.save_dir)
 
         return features
 
