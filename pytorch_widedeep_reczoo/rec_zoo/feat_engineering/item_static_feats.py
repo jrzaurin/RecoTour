@@ -9,7 +9,11 @@ from rec_zoo.feat_engineering.utils import (
     load_movielens,
     load_movie_metadata,
 )
-from rec_zoo.feat_engineering.title_matcher import TitleMatcher, extract_year_and_title
+from rec_zoo.feat_engineering.title_matcher import (
+    TitleMatcher,
+    reorder_title,
+    extract_year_and_title,
+)
 from rec_zoo.feat_engineering.openai_get_title import process_movies_concurrent
 
 
@@ -17,28 +21,29 @@ def process_movie_features(
     movies_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     use_llm: bool = False,
-    genre_col: str = "genres",
     save_dir: str | None = None,
+    replace: bool = False,
 ) -> pd.DataFrame:
-    """
-    Process movie features including title extraction, genre formatting, and
-    movie info retrieval.
+    if save_dir:
+        save_fname = (
+            "processed_movie_features_llm.csv"
+            if use_llm
+            else "processed_movie_features.csv"
+        )
+        full_path = f"{save_dir}/{save_fname}"
 
-    Args:
-        movies_df: DataFrame containing movie data (e.g., from MovieLens)
-        metadata_df: DataFrame containing movie metadata
-        use_llm: If True, use LLM for all titles. If False, only use for unmatched titles
-        genre_col: Name of the genre column
-        save_dir: Directory to save intermediate results. If None, nothing is saved
+        if not replace:
+            try:
+                return pd.read_csv(full_path)
+            except FileNotFoundError:
+                pass
 
-    Returns:
-        DataFrame with processed movie features
-    """
-    # Step 1: Extract year and title
+    # Step 1: Extract year and title, and re-order title if neccessary
     processed_df = extract_year_and_title(movies_df, "title")
+    processed_df = reorder_title(processed_df, "title")
 
     # Step 2: Process genres
-    processed_genres = process_genres(processed_df, genre_col)
+    processed_df = process_genres(processed_df, "genres")
 
     # Step 3: Get movie information
     matches_info: Dict[str, Dict[str, str | float]] = {}
@@ -56,30 +61,19 @@ def process_movie_features(
     # Step 4: Create final DataFrame
     movie_info_df = create_movie_info_df(matches_info, llm_info)
 
-    final_df = processed_df[["title", "year"]].copy()
-    final_df = final_df.merge(
+    final_df = processed_df.merge(
         movie_info_df[["title", "overview", "runtime"]], on="title", how="left"
     )
 
-    if not processed_genres.empty:
-        final_df[genre_col] = processed_genres
-
     if save_dir:
-        save_fname = (
-            "processed_movie_features_llm.csv"
-            if use_llm
-            else "processed_movie_features.csv"
-        )
         save_objects([final_df], [save_fname], save_dir)
 
     return final_df
 
 
-def process_genres(df: pd.DataFrame, genre_col: str) -> pd.Series:
-    """Process genre strings into a consistent format."""
-    if genre_col not in df.columns:
-        return pd.Series(dtype=str)
-    return df[genre_col].str.lower().str.replace("|", "_")
+def process_genres(df: pd.DataFrame, genre_col: str) -> pd.DataFrame:
+    df[genre_col] = df[genre_col].str.lower().str.replace("|", "_")
+    return df
 
 
 def get_movie_info_from_matches(
@@ -152,4 +146,4 @@ if __name__ == "__main__":
     ml_df = load_movielens()
     md_df = load_movie_metadata()
 
-    processed_df = process_movie_features(ml_df, md_df, use_llm=True)
+    processed_df = process_movie_features(ml_df, md_df)

@@ -36,7 +36,7 @@ def _merge_movie_overviews(
     # Find rows where overview is empty in LLM dataset
     empty_overviews = merged_df["overview"] == ""
 
-    # For each empty overview, try to fill it from the regular dataset
+    # For each empty overview, try to fill it from the non-llm dataset
     for idx in merged_df[empty_overviews].index:
         movie_id = merged_df.loc[idx, "item_id"]
         original_overview = movies_with_overview.loc[
@@ -55,9 +55,11 @@ def run_item_static_feat_engineering():
     metadata_df = load_movie_metadata()
 
     # Process movie features (dataset is small so we will run both methods)
-    movies_with_overview = process_movie_features(movielens_df, metadata_df)
+    movies_with_overview = process_movie_features(
+        movielens_df, metadata_df, use_llm=False, save_dir="feature_store"
+    )
     movies_with_overview_llm = process_movie_features(
-        movielens_df, metadata_df, use_llm=True
+        movielens_df, metadata_df, use_llm=True, save_dir="feature_store"
     )
 
     # Merge overviews from both datasets

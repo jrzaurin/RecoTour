@@ -21,7 +21,23 @@ except LookupError:
 def extract_year_and_title(df: pd.DataFrame, title_col: str) -> pd.DataFrame:
     df = df.copy()
     df["year"] = df[title_col].str.extract(r"\((\d{4})\)")
-    df["clean_title"] = df[title_col].str.replace(r"\s*\(\d{4}\)\s*$", "", regex=True)
+    df[title_col] = df[title_col].str.replace(r"\s*\(\d{4}\)\s*$", "", regex=True)
+    return df
+
+
+def reorder_title(df: pd.DataFrame, title_col: str) -> pd.DataFrame:
+    df = df.copy()
+    articles = ["The", "A", "An"]
+
+    def reorder_single_title(title: str) -> str:
+        for article in articles:
+            pattern = f", {article}$"
+            if re.search(pattern, title, re.IGNORECASE):
+                base_title = re.sub(pattern, "", title, flags=re.IGNORECASE)
+                return f"{article} {base_title}"
+        return title
+
+    df[title_col] = df[title_col].apply(reorder_single_title)
     return df
 
 
@@ -31,23 +47,20 @@ class TitleMatcher:
         self,
         movielens_df: pd.DataFrame,
         metadata_df: pd.DataFrame,
-        movielens_title_col: str = "clean_title",
-        metadata_title_col: str = "title",
         match_threshold: float = 0.5,
     ) -> Tuple[Dict[str, Dict[str, Union[str, float]]], List[str]]:
-        titles = movielens_df[movielens_title_col].unique().tolist()
-        ml_titles = [self._reorder_title_article(title) for title in titles]
+        ml_titles = movielens_df["title"].unique().tolist()
 
         metadata_df = metadata_df[  # type: ignore
-            metadata_df[metadata_title_col].notnull()
+            metadata_df["title"].notnull()
         ].reset_index(drop=True)
-        md_titles = metadata_df[metadata_title_col].tolist()
+        md_titles = metadata_df["title"].tolist()
 
         matches, unmatched = self._full_match_search(ml_titles, md_titles)
 
         if unmatched:
             token_match_score = self._token_based_match_search(
-                unmatched, metadata_df[metadata_title_col].tolist()
+                unmatched, metadata_df["title"].tolist()
             )
             token_matches = {
                 k: v for k, v in token_match_score.items() if v["score"] >= match_threshold  # type: ignore[operator]
