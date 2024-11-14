@@ -1,5 +1,6 @@
 from typing import Literal
 
+import fire
 import pandas as pd
 
 from rec_zoo.feat_engineering.utils import (
@@ -20,38 +21,37 @@ from rec_zoo.feat_engineering.overview_embeddings import (
 def _merge_movie_overviews(
     movies_with_overview: pd.DataFrame, movies_with_overview_llm: pd.DataFrame
 ) -> pd.DataFrame:
-    """
-    Fill empty overviews in the LLM dataset with non-empty overviews from the regular dataset
-
-    Args:
-        movies_with_overview (pd.DataFrame): Original movie dataset with overviews
-        movies_with_overview_llm (pd.DataFrame): Movie dataset with LLM-generated overviews
-
-    Returns:
-        pd.DataFrame: Updated LLM dataset with filled overviews
-    """
-    # Create a copy to avoid modifying the original
     merged_df = movies_with_overview_llm.copy()
 
-    # Find rows where overview is empty in LLM dataset
-    empty_overviews = merged_df["overview"] == ""
+    empty_overviews = merged_df["overview"] == "overview not found"
 
-    # For each empty overview, try to fill it from the non-llm dataset
     for idx in merged_df[empty_overviews].index:
         movie_id = merged_df.loc[idx, "item_id"]
-        original_overview = movies_with_overview.loc[
-            movies_with_overview["item_id"] == movie_id, "overview"
-        ].iloc[0]
+        matching_rows = movies_with_overview[
+            movies_with_overview["item_id"] == movie_id
+        ]
 
-        if original_overview != "":
-            merged_df.loc[idx, "overview"] = original_overview
+        if not matching_rows.empty:
+            merged_df.loc[idx, ["overview", "runtime"]] = matching_rows[
+                ["overview", "runtime"]
+            ].iloc[0]
+
+    missing_movies = movies_with_overview[
+        ~movies_with_overview["item_id"].isin(merged_df["item_id"])
+    ]
+
+    if not missing_movies.empty:
+        merged_df = pd.concat([merged_df, missing_movies], ignore_index=True)
 
     return merged_df
 
 
-def run_item_static_feat_engineering():
+def run_item_static_feat_engineering(debug: bool = False):
 
     movielens_df = load_movielens()
+    if debug:
+        movielens_df = movielens_df.sample(500, random_state=1).reset_index(drop=True)
+
     metadata_df = load_movie_metadata()
 
     # Process movie features (dataset is small so we will run both methods)
@@ -70,17 +70,16 @@ def run_item_static_feat_engineering():
     # Embed
     st_overview_embedder = OverviewEmbedder()
     st_overview_embedder.embed_overviews(movies_with_overview_llm)
-    save_objects([st_overview_embedder], ["st_overview_embedder"], "artifacts")
 
     ch_overview_embedder = OverviewEmbedder(method="cohere")
     ch_overview_embedder.embed_overviews(movies_with_overview_llm)
-    save_objects([ch_overview_embedder], ["ch_overview_embedder"], "artifacts")
 
     # Reduce dimensionality
-    reducer = EmbeddingDimensionalityReducer()
+    st_reducer = EmbeddingDimensionalityReducer(n_components=5, save_suffix="st")
+    ch_reducer = EmbeddingDimensionalityReducer(n_components=10, save_suffix="ch")
 
-    _ = reducer.reduce(collection=st_overview_embedder.collection)
-    _ = reducer.reduce(collection=ch_overview_embedder.collection)
+    _ = st_reducer.reduce(collection=st_overview_embedder.collection)
+    _ = ch_reducer.reduce(collection=ch_overview_embedder.collection)
 
 
 def run_item_dynamic_feat_engineering(prefix: Literal["li", "ts"]):
@@ -117,3 +116,8 @@ def run_user_dynamic_feat_engineering(prefix: Literal["li", "ts"]):
         [f"{prefix}_train_udf", f"{prefix}_va_udf"],
         "feature_store",
     )
+
+
+if __name__ == "__main__":
+
+    fire.Fire(run_item_static_feat_engineering)

@@ -1,7 +1,9 @@
 import random
+import multiprocessing as mp
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Literal, Optional
 from pathlib import Path
+from functools import partial
 
 import pandas as pd
 from tqdm import tqdm
@@ -116,6 +118,7 @@ class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
         sample_column: Optional[str] = None,
         target_column: str = "rating",
         positive_target: int = 5,
+        n_cores: int | None = None,
     ):
         train_filename = "full_train.csv" if data_path else "train.csv"
         val_filename = "test.csv" if data_path else "val.csv"
@@ -135,6 +138,7 @@ class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
         self.sample_column = sample_column
         self.target_column = target_column
         self.positive_target = positive_target
+        self.n_cores = n_cores
 
     def split(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if self.data_path:
@@ -145,44 +149,54 @@ class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
         data = data.sort_values([self.user_column, self.time_column]).reset_index(
             drop=True
         )
-
         users = data[self.user_column].unique()
-        test_data: List[pd.Series] = []
-        train_data: List[pd.DataFrame] = []
 
-        for user in tqdm(users, desc=f"Processing users for LPI ({len(users)} users)"):
-            user_data = data[data[self.user_column] == user]
-            if user_data.empty:
-                continue
+        partial_process_user = partial(self._process_user, data=data)
 
-            positive_interactions = user_data[
-                user_data[self.target_column] == self.positive_target
-            ]
-            if len(positive_interactions) == 0:
-                train_data.append(user_data)
-                continue
-
-            last_positive_interaction, user_data_wo_last_interaction = (
-                self._split_user_data(user_data, positive_interactions)
+        n_jobs = self.n_cores if self.n_cores else mp.cpu_count()
+        with mp.Pool(n_jobs) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(partial_process_user, users),
+                    total=len(users),
+                    desc=f"Processing users for LPI ({len(users)} users)",
+                )
             )
-            train_data.append(user_data_wo_last_interaction)
 
-            negative_samples = self._generate_negative_samples(
-                data, user_data, last_positive_interaction
-            )
-            positive_sample = pd.DataFrame([last_positive_interaction.to_dict()])
-            user_id_test_data = pd.concat(
-                [positive_sample, negative_samples],
-                ignore_index=True,
-            )
-            test_data.append(user_id_test_data)
+        train_data = [result[0] for result in results if result[0] is not None]
+        test_data = [result[1] for result in results if result[1] is not None]
 
-        test = pd.concat(test_data, ignore_index=True)
         train = pd.concat(train_data, ignore_index=True)
+        test = pd.concat(test_data, ignore_index=True)
 
         self._save_splits(train, test)
 
         return train, test
+
+    def _process_user(
+        self, user: str, data: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        user_data = data[data[self.user_column] == user]
+        if user_data.empty:
+            return None, None
+
+        positive_interactions = user_data[
+            user_data[self.target_column] == self.positive_target
+        ]
+        if len(positive_interactions) == 0:
+            return user_data, None
+
+        last_positive_interaction, user_data_wo_last_interaction = (
+            self._split_user_data(user_data, positive_interactions)
+        )
+        negative_samples = self._generate_negative_samples(
+            data, user_data, last_positive_interaction
+        )
+        positive_sample = pd.DataFrame([last_positive_interaction.to_dict()])
+        user_id_test_data = pd.concat(
+            [positive_sample, negative_samples], ignore_index=True
+        )
+        return user_data_wo_last_interaction, user_id_test_data
 
     def _split_user_data(
         self, user_data: pd.DataFrame, positive_interactions: pd.DataFrame
@@ -198,31 +212,44 @@ class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
         last_positive_interaction: pd.Series,
     ) -> pd.DataFrame:
         user_items = set(user_data[self.item_column])
-        all_items = set(data[self.item_column])
-        unseen_items = list(all_items - user_items)
+
+        item_features_lookup = (
+            data[[self.item_column] + self.item_feat_columns]
+            .drop_duplicates()
+            .set_index(self.item_column)
+            .to_dict("index")
+        )
+
+        all_negative_items = list(set(item_features_lookup.keys()) - user_items)
 
         if self.sample_column:
             user_categories = set(user_data[self.sample_column])
-            unseen_items = [
+            filtered_items = [
                 item
-                for item in unseen_items
-                if data[data[self.item_column] == item][self.sample_column].iloc[0]
-                in user_categories
+                for item in all_negative_items
+                if item_features_lookup[item][self.sample_column] in user_categories
             ]
 
-        if len(unseen_items) < self.n_negatives:
-            unseen_items = list(all_items - user_items)
+            negative_pool = (
+                filtered_items
+                if len(filtered_items) >= self.n_negatives
+                else all_negative_items
+            )
+        else:
+            negative_pool = all_negative_items
 
         negative_items = random.sample(
-            unseen_items, min(self.n_negatives, len(unseen_items))
+            negative_pool, min(self.n_negatives, len(negative_pool))
         )
 
-        negative_samples = (
-            data[data[self.item_column].isin(negative_items)]
-            .loc[:, [self.item_column] + self.item_feat_columns]
-            .drop_duplicates()
-            .assign(**{self.target_column: 0})
+        negative_samples = pd.DataFrame(
+            [
+                {**item_features_lookup[item], self.item_column: item}
+                for item in negative_items
+            ]
         )
+
+        negative_samples[self.target_column] = 0
 
         cols_to_copy = [
             col
@@ -230,7 +257,8 @@ class LastPositiveInteractionWithNegativeSamplesSplitter(BaseDataSplitter):
             if col
             not in {self.item_column, self.target_column, *self.item_feat_columns}
         ]
-        negative_samples[cols_to_copy] = last_positive_interaction[cols_to_copy].values
+        for col in cols_to_copy:
+            negative_samples[col] = last_positive_interaction[col]
 
         return negative_samples
 
@@ -472,6 +500,8 @@ if __name__ == "__main__":
             item_feat_columns=["title", "genres"],
             dataset="movielens",
             data_path="data/ml-1m/movielens_ratings_with_info.csv",
+            n_negatives=99,
+            sample_column="genres",
         )
     )
     full_train, test = last_positive_interaction_splitter.split()
@@ -483,6 +513,8 @@ if __name__ == "__main__":
             time_column="timestamp",
             item_feat_columns=["title", "genres"],
             dataset="movielens",
+            n_negatives=99,
+            sample_column="genres",
         )
     )
     lpi_train, lpi_val = last_positive_interaction_splitter_val.split()
@@ -493,6 +525,7 @@ if __name__ == "__main__":
         item_column="item_id",
         time_column="timestamp",
     )
+    li_train, li_val = last_interaction_splitter.split()
 
     temporal_splitter = TemporalSplitter(
         dataset="movielens",
@@ -508,6 +541,6 @@ if __name__ == "__main__":
         item_column="item_id",
         time_column="timestamp",
         rating_column="rating",
-        sequence_length=5,
+        sequence_length=10,
     )
     lis_train, lis_val = last_interaction_sequence_splitter.split()

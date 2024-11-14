@@ -79,6 +79,7 @@ def test_last_positive_interaction_splitter(sample_data, tmp_path, sample_column
         n_negatives=2,
         target_column="rating",
         positive_target=5,
+        n_cores=1,
     )
 
     # Override paths
@@ -125,6 +126,7 @@ def test_last_positive_interaction_splitter_val(sample_data, tmp_path):
         n_negatives=2,
         target_column="rating",
         positive_target=5,
+        n_cores=1,
     )
 
     # Override the root_dir to use tmp_path

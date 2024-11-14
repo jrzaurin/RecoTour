@@ -2,12 +2,21 @@ import json
 import asyncio
 from typing import Dict, List
 
+import tenacity
 from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
 
 from rec_zoo.tokens_and_api_keys import OPENAI_API_KEY
 
 
+@tenacity.retry(
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
+    retry=tenacity.retry_if_exception_type(Exception),
+    before_sleep=lambda retry_state: print(
+        f"Retrying {retry_state.fn.__name__}, attempt {retry_state.attempt_number}"
+    ),
+)
 async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | float]:
     client = AsyncOpenAI(api_key=api_key)
 
@@ -17,7 +26,7 @@ async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | f
 
     - Do not include the title of the movie in the overview.
     - If you are unable to find the movie, or are unsure of the details,
-      please leave the overview empty and the runtime as 0.0.
+      please return "overview not found" and 0.0 for the runtime.
 
     # Output Format
     Return ONLY a JSON object with this exact format:
@@ -25,40 +34,39 @@ async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | f
     {{"overview": "description here", "runtime": "XXX"}}
 
     if information is not found:
-    {{"overview": "", "runtime": 0.0}}
+    {{"overview": "overview not found", "runtime": 0.0}}
     """
 
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a movie database API. Always respond with valid JSON.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.7,
-            max_tokens=200,
-            response_format={"type": "json_object"},
-        )
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a movie database API. Always respond with valid JSON.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+        max_tokens=200,
+        response_format={"type": "json_object"},
+    )
 
-        result = json.loads(response.choices[0].message.content)
-        return {"overview": result.get("overview"), "runtime": result.get("runtime")}
-
-    except Exception as e:
-        print(f"Error getting movie details for {title}: {str(e)}")
-        return {"overview": "", "runtime": 0.0}
+    result = json.loads(response.choices[0].message.content)
+    return {"overview": result.get("overview"), "runtime": result.get("runtime")}
 
 
 async def process_movies_concurrent(
-    titles: List[str], api_key: str, max_concurrent: int = 5
+    titles: List[str], api_key: str, max_concurrent: int = 6
 ):
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def bounded_get_details(title):
         async with semaphore:
-            return await get_movie_details_async(title, api_key)
+            try:
+                return await get_movie_details_async(title, api_key)
+            except Exception as e:
+                print(f"All retries failed for {title}: {str(e)}")
+                return {"overview": "", "runtime": 0.0}
 
     tasks = [bounded_get_details(title) for title in titles]
     return await tqdm.gather(*tasks, desc="Processing movies")

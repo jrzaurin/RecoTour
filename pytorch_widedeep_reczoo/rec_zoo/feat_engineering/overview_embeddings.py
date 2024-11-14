@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Union, Literal, Sequence
+from pathlib import Path
 
 import numpy as np
 import cohere
@@ -20,6 +21,7 @@ class OverviewEmbedder:
         method: Literal["sentence_transformer", "cohere"] = "sentence_transformer",
         model_name: str = "all-mpnet-base-v2",
         save_dir: str = "feature_store",
+        replace: bool = False,
     ):
         """
         Args:
@@ -36,10 +38,26 @@ class OverviewEmbedder:
             self.embedder = cohere.Client(COHERE_API_KEY)  # type: ignore[assignment]
             self.db_name = "overview_embeddings_cohere"
 
+        save_path = Path(save_dir) / self.db_name
+        save_path.mkdir(parents=True, exist_ok=True)
+
         self.chroma_client = Client(
-            Settings(persist_directory=f"{save_dir}/{self.db_name}")
+            Settings(persist_directory=f"{save_dir}/{self.db_name}", is_persistent=True)
         )
-        self.collection: Collection | None = None
+
+        if replace:
+            try:
+                self.chroma_client.delete_collection(name=self.db_name)
+            except Exception:
+                pass  # Collection might not exist
+            self.collection = self.chroma_client.create_collection(name=self.db_name)
+        else:
+            try:
+                self.collection = self.chroma_client.get_collection(name=self.db_name)
+            except Exception:
+                self.collection = self.chroma_client.create_collection(
+                    name=self.db_name
+                )
 
     def embed_overviews(
         self, df: pd.DataFrame, overview_col: str = "overview", id_col: str = "item_id"
@@ -57,8 +75,6 @@ class OverviewEmbedder:
                 input_type="search_document",
             )
             embeddings = np.array(response.embeddings)
-
-        self.collection = self.chroma_client.create_collection(name=self.db_name)
 
         self.collection.add(
             embeddings=embeddings.tolist(),
@@ -118,9 +134,9 @@ class EmbeddingDimensionalityReducer:
     def __init__(
         self,
         n_components: int = 5,
-        random_state: int = 42,
         umap_config: Dict[str, Any] | None = None,
         save_dir: str | None = "feature_store",
+        save_suffix: Literal["st", "ch"] = "st",
     ):
         """
         Args:
@@ -138,8 +154,8 @@ class EmbeddingDimensionalityReducer:
                 }
         """
         self.n_components = n_components
-        self.random_state = random_state
         self.save_dir = save_dir
+        self.save_suffix = save_suffix
 
         default_config = {
             "n_neighbors": 15,
@@ -151,9 +167,7 @@ class EmbeddingDimensionalityReducer:
         if umap_config:
             default_config.update(umap_config)
 
-        self.reducer = umap.UMAP(
-            n_components=n_components, random_state=random_state, **default_config
-        )
+        self.reducer = umap.UMAP(n_components=n_components, **default_config)
 
     def reduce(
         self,
@@ -177,7 +191,7 @@ class EmbeddingDimensionalityReducer:
             raise ValueError("Only one of embeddings or collection should be provided")
 
         if collection is not None:
-            result = collection.get(include=["embeddings", "ids"])  # type: ignore[list-item]
+            result = collection.get(include=["embeddings"])  # type: ignore[list-item]
             embeddings = np.array(result["embeddings"])
             ids = result["ids"]
         else:
@@ -190,6 +204,10 @@ class EmbeddingDimensionalityReducer:
         results_df["movie_id"] = ids
 
         if self.save_dir:
-            save_objects([self.reducer], ["umap_reducer"], self.save_dir)
+            umap_fname = f"umap_reducer_{self.save_suffix}.pkl"
+            df_fname = f"umap_results_{self.save_suffix}.csv"
+            save_objects(
+                [self.reducer, results_df], [umap_fname, df_fname], self.save_dir
+            )
 
-        return results_df[["movie_id"] + embedding_cols]
+        return results_df
