@@ -142,6 +142,19 @@ def create_movie_info_df(
     return df[["title", "overview", "runtime"]]
 
 
+def manual_update_df_from_dict(df: pd.DataFrame, overview_dict: dict) -> pd.DataFrame:
+    """Update dataframe overviews and runtimes from dictionary based on title matches."""
+    result_df = df.copy()
+
+    for title, data in overview_dict.items():
+        mask = result_df["title"] == title
+        if any(mask):
+            result_df.loc[mask, "overview"] = data["overview"]
+            result_df.loc[mask, "runtime"] = data["runtime"]
+
+    return result_df
+
+
 if __name__ == "__main__":
     ml_df = load_movielens()
     md_df = load_movie_metadata()

@@ -8,6 +8,8 @@ class ItemDynamicFeatures:
         """Compute all dynamic features for items."""
 
         dfc = df.copy()
+        dfc["timestamp"] = pd.to_datetime(dfc["timestamp"])
+
         rating_counts = dfc.groupby("item_id").agg(
             {"rating": ["count", "nunique"], "user_id": "nunique"}
         )
@@ -23,13 +25,32 @@ class ItemDynamicFeatures:
             }
         )
 
-        demographic_modes = dfc.groupby("item_id").agg(
-            {
-                "occupation": lambda x: x.mode().iloc[0] if not x.empty else None,
-                "zipcode": lambda x: x.mode().iloc[0] if not x.empty else None,
-                "age": lambda x: x.mode().iloc[0] if not x.empty else None,
-            }
-        )
+        # Create separate aggregations for each rank
+        demographic_modes = pd.DataFrame()
+
+        for i, suffix in enumerate(["_1", "_2", "_3"]):
+            rank_modes = (
+                dfc.groupby("item_id")
+                .agg(
+                    {
+                        "occupation": lambda x: (
+                            x.astype(str).value_counts().nlargest(3).index[i]
+                            if len(x.value_counts()) > i
+                            else None
+                        ),
+                        "age": lambda x: (
+                            x.astype(str).value_counts().nlargest(3).index[i]
+                            if len(x.value_counts()) > i
+                            else None
+                        ),
+                    }
+                )
+                .rename(
+                    columns={"occupation": f"occupation{suffix}", "age": f"age{suffix}"}
+                )
+            )
+
+            demographic_modes = pd.concat([demographic_modes, rank_modes], axis=1)
 
         gender_counts = dfc.groupby(["item_id", "gender"]).size().unstack(fill_value=0)
 
@@ -55,9 +76,12 @@ class ItemDynamicFeatures:
             "rating_mean",
             "rating_std",
             "rating_iqr",
-            "most_common_occupation",
-            "most_common_zipcode",
-            "most_common_age",
+            "occupation_1",
+            "occupation_2",
+            "occupation_3",
+            "age_1",
+            "age_2",
+            "age_3",
             "female_viewers",
             "male_viewers",
             "mean_days_between_ratings",

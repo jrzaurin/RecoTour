@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from rec_zoo.feat_engineering.utils import save_objects
+from rec_zoo.feat_engineering.item_static_feats import process_genres
 
 
 class UserDynamicFeatures:
@@ -16,6 +17,7 @@ class UserDynamicFeatures:
 
         dfc = df.copy()
         dfc["timestamp"] = pd.to_datetime(dfc["timestamp"])
+        dfc = process_genres(dfc, "genres")
 
         # Basic count features
         viewing_counts = dfc.groupby("user_id").agg(
@@ -53,7 +55,9 @@ class UserDynamicFeatures:
             "viewing_recency_days",
             "viewing_timespan_days",
             "viewing_frequency_weekly",
-            "favorite_genre",
+            "favorite_genre_1",
+            "favorite_genre_2",
+            "favorite_genre_3",
             "unique_genres_count",
         ]
 
@@ -109,18 +113,34 @@ class UserDynamicFeatures:
         return pd.DataFrame(time_features).set_index("user_id")
 
     def _compute_genre_preferences(self, merged_df: pd.DataFrame) -> pd.DataFrame:
-        """Compute genre preferences for users."""
-        # Assuming genres are stored as a list or string that can be split
-        genre_preferences = pd.DataFrame()
+        """Compute genre preferences for users based on average ratings."""
 
-        # Get favorite genre (mode)
-        genre_preferences["favorite_genre"] = merged_df.groupby("user_id")["genre"].agg(
-            lambda x: x.mode().iloc[0] if not x.empty else None
+        def get_top_3_genres_and_count(user_data):
+            genre_ratings = user_data.groupby("genres")["rating"].agg(["mean", "count"])
+            # Sort by mean rating (descending), then by count (descending) for tiebreaking
+            top_genres = genre_ratings.sort_values(
+                ["mean", "count"], ascending=[False, False]
+            ).head(3)
+
+            return pd.Series(
+                {
+                    "favorite_genre_1": (
+                        top_genres.index[0] if len(top_genres) > 0 else np.nan
+                    ),
+                    "favorite_genre_2": (
+                        top_genres.index[1] if len(top_genres) > 1 else np.nan
+                    ),
+                    "favorite_genre_3": (
+                        top_genres.index[2] if len(top_genres) > 2 else np.nan
+                    ),
+                    "unique_genres_count": len(
+                        genre_ratings
+                    ),  # Add count of unique genres
+                }
+            )
+
+        genre_preferences = merged_df.groupby("user_id").apply(
+            get_top_3_genres_and_count
         )
-
-        # Count unique genres per user
-        genre_preferences["unique_genres_count"] = merged_df.groupby("user_id")[
-            "genre"
-        ].nunique()
 
         return genre_preferences

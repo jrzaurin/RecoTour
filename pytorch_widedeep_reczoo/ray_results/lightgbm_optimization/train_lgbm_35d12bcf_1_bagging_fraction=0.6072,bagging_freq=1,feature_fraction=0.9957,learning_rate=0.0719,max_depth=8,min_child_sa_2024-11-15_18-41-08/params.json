@@ -1,0 +1,10 @@
+{
+  "bagging_fraction": 0.6072430478178547,
+  "bagging_freq": 1,
+  "feature_fraction": 0.9957433071941092,
+  "learning_rate": 0.07190305987685333,
+  "max_depth": 8,
+  "min_child_samples": 66,
+  "min_data_in_leaf": 16,
+  "num_leaves": 85
+}

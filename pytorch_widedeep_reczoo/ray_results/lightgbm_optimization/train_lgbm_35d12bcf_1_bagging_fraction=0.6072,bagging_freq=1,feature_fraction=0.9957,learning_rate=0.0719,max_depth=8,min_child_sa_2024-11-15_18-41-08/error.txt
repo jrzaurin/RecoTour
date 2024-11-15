@@ -1,0 +1,23 @@
+Failure # 1 (occurred at 2024-11-15_18-41-17)
+[36mray::ImplicitFunc.train()[39m (pid=32206, ip=127.0.0.1, actor_id=6277c2e9b89b39c20c82cafe01000000, repr=train_lgbm)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/javierrodriguezzaurin/.pyenv/versions/recsys311/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 331, in train
+    raise skipped from exception_cause(skipped)
+  File "/Users/javierrodriguezzaurin/.pyenv/versions/recsys311/lib/python3.11/site-packages/ray/air/_internal/util.py", line 104, in run
+    self._ret = self._target(*self._args, **self._kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/javierrodriguezzaurin/.pyenv/versions/recsys311/lib/python3.11/site-packages/ray/tune/trainable/function_trainable.py", line 45, in <lambda>
+    training_func=lambda: self._trainable_func(self.config),
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/javierrodriguezzaurin/.pyenv/versions/recsys311/lib/python3.11/site-packages/ray/tune/trainable/function_trainable.py", line 250, in _trainable_func
+    output = fn()
+             ^^^^
+  File "/Users/javierrodriguezzaurin/.pyenv/versions/recsys311/lib/python3.11/site-packages/ray/tune/trainable/util.py", line 130, in inner
+    return trainable(config, **fn_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/javierrodriguezzaurin/ml_projects/RecoTour/pytorch_widedeep_reczoo/run_ts_lightgbm.py", line 52, in train_lgbm
+    val_loss = min(model.best_score["valid_0"]["binary_logloss"])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'numpy.float64' object is not iterable

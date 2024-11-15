@@ -199,9 +199,9 @@ class EmbeddingDimensionalityReducer:
 
         low_dim_embeddings = self.reducer.fit_transform(embeddings)
 
-        embedding_cols = [f"embedding_{i}" for i in range(self.n_components)]
+        embedding_cols = [f"umap_{i}" for i in range(self.n_components)]
         results_df = pd.DataFrame(low_dim_embeddings, columns=embedding_cols)
-        results_df["movie_id"] = ids
+        results_df["item_id"] = ids
 
         if self.save_dir:
             umap_fname = f"umap_reducer_{self.save_suffix}.pkl"

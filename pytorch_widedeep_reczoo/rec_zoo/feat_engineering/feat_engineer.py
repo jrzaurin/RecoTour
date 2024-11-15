@@ -18,6 +18,16 @@ from rec_zoo.feat_engineering.overview_embeddings import (
 )
 
 
+def _impute_runtime(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute NaN with 0s and then values of 0.0 with the median runtime of
+    non-zero values."""
+    df = df.copy()
+    median_runtime = df[df["runtime"] > 0]["runtime"].median()
+    df["runtime"] = df["runtime"].fillna(0)
+    df.loc[df["runtime"] == 0.0, "runtime"] = median_runtime
+    return df
+
+
 def _merge_movie_overviews(
     movies_with_overview: pd.DataFrame, movies_with_overview_llm: pd.DataFrame
 ) -> pd.DataFrame:
@@ -42,6 +52,11 @@ def _merge_movie_overviews(
 
     if not missing_movies.empty:
         merged_df = pd.concat([merged_df, missing_movies], ignore_index=True)
+
+    merged_df = _impute_runtime(merged_df)
+
+    # replace overview nans with "overview not found"
+    merged_df["overview"] = merged_df["overview"].fillna("overview not found")
 
     return merged_df
 
@@ -68,10 +83,10 @@ def run_item_static_feat_engineering(debug: bool = False):
     )
 
     # Embed
-    st_overview_embedder = OverviewEmbedder()
+    st_overview_embedder = OverviewEmbedder(replace=True)
     st_overview_embedder.embed_overviews(movies_with_overview_llm)
 
-    ch_overview_embedder = OverviewEmbedder(method="cohere")
+    ch_overview_embedder = OverviewEmbedder(method="cohere", replace=True)
     ch_overview_embedder.embed_overviews(movies_with_overview_llm)
 
     # Reduce dimensionality
@@ -82,42 +97,46 @@ def run_item_static_feat_engineering(debug: bool = False):
     _ = ch_reducer.reduce(collection=ch_overview_embedder.collection)
 
 
-def run_item_dynamic_feat_engineering(prefix: Literal["li", "ts"]):
+def run_item_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
 
     dirname = f"{prefix}_movielens_splits"
 
-    train, val = load_movielens_train_val(dirname, "both")
+    train, _ = load_movielens_train_val(dirname, "both")
 
     item_dynamic_feats = ItemDynamicFeatures()
     train_idf = item_dynamic_feats.compute_features(train)
-    va_idf = pd.merge(
-        val[["item_id"]].drop_duplicates(), train_idf, on="item_id", how="left"
-    )
+
     save_objects(
-        [train_idf, va_idf],
-        [f"{prefix}_train_idf", f"{prefix}_va_idf"],
+        [train_idf],
+        [f"{prefix}_train_idf.csv"],
         "feature_store",
     )
 
 
-def run_user_dynamic_feat_engineering(prefix: Literal["li", "ts"]):
+def run_user_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
 
     dirname = f"{prefix}_movielens_splits"
 
-    train, val = load_movielens_train_val(dirname, "both")
+    train, _ = load_movielens_train_val(dirname, "both")
 
     user_dynamic_feats = UserDynamicFeatures()
     train_udf = user_dynamic_feats.compute_features(train)
-    va_udf = pd.merge(
-        val[["user_id"]].drop_duplicates(), train_udf, on="user_id", how="left"
-    )
+
     save_objects(
-        [train_udf, va_udf],
-        [f"{prefix}_train_udf", f"{prefix}_va_udf"],
+        [train_udf],
+        [f"{prefix}_train_udf.csv"],
         "feature_store",
     )
+
+
+def run_engineer(debug: bool = False, prefix: Literal["lpi", "li", "ts"] = "li"):
+    run_item_static_feat_engineering(debug)
+
+    run_item_dynamic_feat_engineering(prefix)
+
+    run_user_dynamic_feat_engineering(prefix)
 
 
 if __name__ == "__main__":
 
-    fire.Fire(run_item_static_feat_engineering)
+    fire.Fire(run_engineer)
