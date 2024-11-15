@@ -133,9 +133,7 @@ class UserDynamicFeatures:
                     "favorite_genre_3": (
                         top_genres.index[2] if len(top_genres) > 2 else np.nan
                     ),
-                    "unique_genres_count": len(
-                        genre_ratings
-                    ),  # Add count of unique genres
+                    "unique_genres_count": len(genre_ratings),
                 }
             )
 

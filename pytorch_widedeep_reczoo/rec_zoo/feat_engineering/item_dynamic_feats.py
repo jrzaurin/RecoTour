@@ -29,7 +29,7 @@ class ItemDynamicFeatures:
         demographic_modes = pd.DataFrame()
 
         for i, suffix in enumerate(["_1", "_2", "_3"]):
-            rank_modes = (
+            rank_modes = (  # type: ignore
                 dfc.groupby("item_id")
                 .agg(
                     {
@@ -77,10 +77,10 @@ class ItemDynamicFeatures:
             "rating_std",
             "rating_iqr",
             "occupation_1",
-            "occupation_2",
-            "occupation_3",
             "age_1",
+            "occupation_2",
             "age_2",
+            "occupation_3",
             "age_3",
             "female_viewers",
             "male_viewers",

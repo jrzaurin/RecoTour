@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Any, Dict, List, Optional
 
 import ray
@@ -11,6 +12,8 @@ from ray.tune.schedulers import HyperBandScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
 
 from rec_zoo.prepare_experiments.prepare_ts import prepare_experiment
+
+warnings.filterwarnings("ignore")
 
 
 def train_lgbm(
@@ -60,7 +63,7 @@ def train_lgbm(
 
 def run_optimization(
     optimizer: str = "tpe",
-    num_trials: int = 5,
+    num_trials: int = 100,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,

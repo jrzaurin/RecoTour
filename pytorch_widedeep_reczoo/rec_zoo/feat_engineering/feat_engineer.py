@@ -1,6 +1,5 @@
 from typing import Literal
 
-import fire
 import pandas as pd
 
 from rec_zoo.feat_engineering.utils import (
@@ -18,50 +17,19 @@ from rec_zoo.feat_engineering.overview_embeddings import (
 )
 
 
-def _impute_runtime(df: pd.DataFrame) -> pd.DataFrame:
-    """Impute NaN with 0s and then values of 0.0 with the median runtime of
-    non-zero values."""
-    df = df.copy()
-    median_runtime = df[df["runtime"] > 0]["runtime"].median()
-    df["runtime"] = df["runtime"].fillna(0)
-    df.loc[df["runtime"] == 0.0, "runtime"] = median_runtime
-    return df
-
-
-def _merge_movie_overviews(
-    movies_with_overview: pd.DataFrame, movies_with_overview_llm: pd.DataFrame
-) -> pd.DataFrame:
-    merged_df = movies_with_overview_llm.copy()
-
-    empty_overviews = merged_df["overview"] == "overview not found"
-
-    for idx in merged_df[empty_overviews].index:
-        movie_id = merged_df.loc[idx, "item_id"]
-        matching_rows = movies_with_overview[
-            movies_with_overview["item_id"] == movie_id
-        ]
-
-        if not matching_rows.empty:
-            merged_df.loc[idx, ["overview", "runtime"]] = matching_rows[
-                ["overview", "runtime"]
-            ].iloc[0]
-
-    missing_movies = movies_with_overview[
-        ~movies_with_overview["item_id"].isin(merged_df["item_id"])
-    ]
-
-    if not missing_movies.empty:
-        merged_df = pd.concat([merged_df, missing_movies], ignore_index=True)
-
-    merged_df = _impute_runtime(merged_df)
-
-    # replace overview nans with "overview not found"
-    merged_df["overview"] = merged_df["overview"].fillna("overview not found")
-
-    return merged_df
-
-
 def run_item_static_feat_engineering(debug: bool = False):
+    """Process and engineer static features for movie items in the dataset.
+
+    This function:
+    1. Loads MovieLens and movie metadata
+    2. Processes movie features with and without LLM
+    3. Merges movie overviews from both approaches
+    4. Generates embeddings using different methods (Sentence Transformers and Cohere)
+    5. Reduces dimensionality of the embeddings
+
+    Args:
+        debug (bool, optional): If True, uses a smaller sample of data for testing. Defaults to False.
+    """
 
     movielens_df = load_movielens()
     if debug:
@@ -98,6 +66,14 @@ def run_item_static_feat_engineering(debug: bool = False):
 
 
 def run_item_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
+    """Generate dynamic features for items based on historical interactions.
+
+    Args:
+        prefix (Literal["lpi", "li", "ts"]): Dataset split prefix:
+            - 'lpi': Last Positive Interaction
+            - 'li': Last Interaction
+            - 'ts': Temporal split
+    """
 
     dirname = f"{prefix}_movielens_splits"
 
@@ -114,6 +90,14 @@ def run_item_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
 
 
 def run_user_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
+    """Generate dynamic features for users based on their interaction history.
+
+    Args:
+        prefix (Literal["lpi", "li", "ts"]): Dataset split prefix:
+            - 'lpi': Last Positive Interaction
+            - 'li': Last Interaction
+            - 'ts': Temporal split
+    """
 
     dirname = f"{prefix}_movielens_splits"
 
@@ -129,14 +113,79 @@ def run_user_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
     )
 
 
-def run_engineer(debug: bool = False, prefix: Literal["lpi", "li", "ts"] = "li"):
-    run_item_static_feat_engineering(debug)
+def _impute_runtime(df: pd.DataFrame) -> pd.DataFrame:
+    """Impute missing runtime values in the movie dataset.
 
-    run_item_dynamic_feat_engineering(prefix)
+    First fills NaN values with 0, then replaces 0 values with the median runtime
+    of non-zero entries.
 
-    run_user_dynamic_feat_engineering(prefix)
+    Args:
+        df (pd.DataFrame):
+            DataFrame containing movie information with 'runtime' column
+
+    Returns:
+        pd.DataFrame:
+            DataFrame with imputed runtime values
+    """
+    df = df.copy()
+    median_runtime = df[df["runtime"] > 0]["runtime"].median()
+    df["runtime"] = df["runtime"].fillna(0.0)
+    df.loc[df["runtime"] == 0.0, "runtime"] = median_runtime
+    return df
+
+
+def _merge_movie_overviews(
+    movies_with_overview: pd.DataFrame, movies_with_overview_llm: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge movie overviews from two different sources, prioritizing LLM-generated content.
+
+    This function combines movie overviews from standard processing and LLM-processing,
+    using the standard processing as a fallback when LLM-generated overviews are missing.
+
+    Args:
+        movies_with_overview (pd.DataFrame):
+            DataFrame with standard-processed movie overviews
+        movies_with_overview_llm (pd.DataFrame):
+            DataFrame with LLM-processed movie overviews
+
+    Returns:
+        pd.DataFrame:
+            Merged DataFrame with combined overviews and imputed runtime values
+    """
+    merged_df = movies_with_overview_llm.copy()
+
+    empty_overviews = merged_df["overview"] == "overview not found"
+
+    for idx in merged_df[empty_overviews].index:
+        movie_id = merged_df.loc[idx, "item_id"]
+        matching_rows = movies_with_overview[
+            movies_with_overview["item_id"] == movie_id
+        ]
+
+        if not matching_rows.empty:
+            merged_df.loc[idx, ["overview", "runtime"]] = matching_rows[
+                ["overview", "runtime"]
+            ].iloc[0]
+
+    missing_movies = movies_with_overview[
+        ~movies_with_overview["item_id"].isin(merged_df["item_id"])
+    ]
+
+    if not missing_movies.empty:
+        merged_df = pd.concat([merged_df, missing_movies], ignore_index=True)
+
+    merged_df = _impute_runtime(merged_df)
+
+    # replace overview nans with "overview not found"
+    merged_df["overview"] = merged_df["overview"].fillna("overview not found")
+
+    return merged_df
 
 
 if __name__ == "__main__":
 
-    fire.Fire(run_engineer)
+    run_item_static_feat_engineering()
+
+    for prefix in ["lpi", "li", "ts"]:
+        run_item_dynamic_feat_engineering(prefix)  # type: ignore
+        run_user_dynamic_feat_engineering(prefix)  # type: ignore

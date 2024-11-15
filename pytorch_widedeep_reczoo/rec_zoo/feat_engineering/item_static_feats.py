@@ -24,6 +24,37 @@ def process_movie_features(
     save_dir: str | None = None,
     replace: bool = False,
 ) -> pd.DataFrame:
+    """Process movie features by extracting and enriching movie information.
+
+    This function processes movie features through several steps:
+    1. Extracts year and standardizes movie titles
+    2. Processes genre information
+    3. Retrieves movie information either through metadata matching or via an
+    LLM
+    4. Combines all information into a final DataFrame
+
+    Args:
+        movies_df (pd.DataFrame):
+            Input DataFrame containing movie information with at least 'title' column
+        metadata_df (pd.DataFrame):
+            Reference DataFrame containing movie metadata
+        use_llm (bool, optional):
+            Whether to use LLM for retrieving movie information. Defaults to False
+        save_dir (str | None, optional):
+            Directory to save processed results. If None, results won't be saved
+        replace (bool, optional):
+            Whether to replace existing saved files. Defaults to False
+
+    Returns:
+        pd.DataFrame: Processed DataFrame containing enriched movie information with columns:
+            - Original columns from movies_df
+            - overview: Movie plot overview
+            - runtime: Movie duration in minutes
+
+    Note:
+        If save_dir is provided and replace=False, the function will first try to load
+        existing processed data before performing any processing.
+    """
     if save_dir:
         save_fname = (
             "processed_movie_features_llm.csv"
@@ -72,6 +103,18 @@ def process_movie_features(
 
 
 def process_genres(df: pd.DataFrame, genre_col: str) -> pd.DataFrame:
+    """Process genre information in the DataFrame.
+
+    Args:
+        df (pd.DataFrame):
+            Input DataFrame containing genre information
+        genre_col (str):
+            Name of the column containing genre information
+
+    Returns:
+        pd.DataFrame:
+            DataFrame with processed genre information (lowercase and '|' replaced with '_')
+    """
     df[genre_col] = df[genre_col].str.lower().str.replace("|", "_")
     return df
 
@@ -81,6 +124,20 @@ def get_movie_info_from_matches(
     metadata_df: pd.DataFrame,
     metadata_title_col: str = "title",
 ) -> Dict[str, Dict[str, str | float]]:
+    """Extract movie information from matched titles using metadata.
+
+    Args:
+        matches (Dict[str, Dict[str, str | float]]):
+            Dictionary of matched movie titles
+        metadata_df (pd.DataFrame):
+            DataFrame containing movie metadata
+        metadata_title_col (str, optional):
+            Name of the title column in metadata_df. Defaults to "title"
+
+    Returns:
+        Dict[str, Dict[str, str | float]]:
+            Dictionary mapping movie titles to their overview and runtime information
+    """
     movie_info = {}
     for ml_title, match_info in matches.items():
         matched_title = match_info["match"]
@@ -116,6 +173,16 @@ def get_title_matches(
 async def get_movie_info_with_llm(
     titles: List[str],
 ) -> Dict[str, Dict[str, str | float]]:
+    """Retrieve movie information using LLM for a list of titles.
+
+    Args:
+        titles (List[str]):
+            List of movie titles to process
+
+    Returns:
+        Dict[str, Dict[str, str | float]]:
+            Dictionary mapping titles to their LLM-generated information
+    """
     llm_results = await process_movies_concurrent(
         titles, OPENAI_API_KEY, max_concurrent=5
     )
@@ -136,6 +203,18 @@ def create_movie_info_df(
     matches_info: Dict[str, Dict[str, str | float]] = {},
     llm_matches: Dict[str, Dict[str, str | float]] = {},
 ) -> pd.DataFrame:
+    """Create a DataFrame from matched and LLM-generated movie information.
+
+    Args:
+        matches_info (Dict[str, Dict[str, str | float]], optional):
+            Dictionary of matched movie information. Defaults to {}
+        llm_matches (Dict[str, Dict[str, str | float]], optional):
+            Dictionary of LLM-generated movie information. Defaults to {}
+
+    Returns:
+        pd.DataFrame:
+            DataFrame containing combined movie information with columns: title, overview, and runtime
+    """
     all_info = matches_info.copy()
     all_info.update(llm_matches)
     df = pd.DataFrame([{"title": title, **info} for title, info in all_info.items()])

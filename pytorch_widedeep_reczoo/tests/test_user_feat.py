@@ -21,7 +21,7 @@ def sample_data():
             datetime(2023, 1, 10),
             datetime(2023, 1, 5),
         ],
-        "genre": ["action", "comedy", "action", "drama", "comedy", "action"],
+        "genres": ["action", "comedy", "action", "drama", "comedy", "action"],
     }
     return pd.DataFrame(data)
 
@@ -44,7 +44,9 @@ def test_compute_features(sample_data):
         "viewing_recency_days",
         "viewing_timespan_days",
         "viewing_frequency_weekly",
-        "favorite_genre",
+        "favorite_genre_1",
+        "favorite_genre_2",
+        "favorite_genre_3",
         "unique_genres_count",
     ]
     assert all(col in features.columns for col in expected_columns)
@@ -56,7 +58,7 @@ def test_compute_features(sample_data):
     assert features_user_1["unique_movies"].values[0] == 3
     assert features_user_1["rating_mean"].values[0] == 4.0
     assert features_user_1["unique_genres_count"].values[0] == 2
-    assert features_user_1["favorite_genre"].values[0] == "action"
+    assert features_user_1["favorite_genre_1"].values[0] == "action"
 
 
 def test_compute_time_features(sample_data):
@@ -86,10 +88,15 @@ def test_compute_genre_preferences(sample_data):
     genre_features = udf._compute_genre_preferences(sample_data)
 
     # Check if all genre-related columns are present
-    assert "favorite_genre" in genre_features.columns
-    assert "unique_genres_count" in genre_features.columns
+    expected_columns = [
+        "favorite_genre_1",
+        "favorite_genre_2",
+        "favorite_genre_3",
+        "unique_genres_count",
+    ]
+    assert all(col in genre_features.columns for col in expected_columns)
 
     # Check specific values
-    assert genre_features.loc[1, "favorite_genre"] == "action"
+    assert genre_features.loc[1, "favorite_genre_1"] == "action"
     assert genre_features.loc[1, "unique_genres_count"] == 2
     assert genre_features.loc[2, "unique_genres_count"] == 2
