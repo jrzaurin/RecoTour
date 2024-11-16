@@ -84,14 +84,13 @@ def run_optimization(
 
     # Define search space
     search_space = {
-        "learning_rate": tune.loguniform(1e-4, 1e-1),
+        "learning_rate": tune.loguniform(1e-4, 3e-1),
         "num_leaves": tune.randint(20, 200),
-        "max_depth": tune.randint(3, 12),
         "min_data_in_leaf": tune.randint(5, 100),
-        "feature_fraction": tune.uniform(0.5, 1.0),
-        "bagging_fraction": tune.uniform(0.5, 1.0),
-        "bagging_freq": tune.randint(1, 7),
+        "feature_fraction": tune.uniform(0.4, 1.0),
         "min_child_samples": tune.randint(5, 100),
+        "lambda_l1": tune.loguniform(1e-4, 1e-1),
+        "lambda_l2": tune.loguniform(1e-4, 1e-1),
     }
 
     try:

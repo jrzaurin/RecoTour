@@ -1,5 +1,7 @@
+import pickle
 import warnings
 from typing import Any, Dict
+from pathlib import Path
 
 import lightgbm as lgb
 from lightgbm import Dataset as lgbDataset
@@ -20,22 +22,18 @@ class LGBOptunaOptimizer(object):
         Simple class that wraps up funcionality around LightGBMTuner
         """
         self.verbose = verbose
-        self.best: Dict[str, Any] = {}  # Best hyper-parameters
+        self.best: Dict[str, Any] = {}
 
     def optimize(self, dtrain: lgbDataset, deval: lgbDataset):
 
-        # Define the base parameters. In future versions (or in lightv) this
-        # needs to be flexibly set up
-        params: Dict = {"objective": "binary"}
+        params: Dict[str, Any] = {"objective": "binary"}
         if self.verbose:
             params["verbosity"] = 1
         else:
             params["verbosity"] = -1
 
-        # eary stop at 50
         params["early_stopping_rounds"] = 50
 
-        # No need to combine datasets anymore - use them separately
         self.tuner = lightgbm.LightGBMTuner(
             params=params,
             train_set=dtrain,
@@ -52,8 +50,7 @@ class LGBOptunaOptimizer(object):
         self.best["n_estimators"] = 1000  # type: ignore
 
 
-if __name__ == "__main__":
-
+def run_ts_lightgbm_optuna():
     train_df, val_df, _, encoder = prepare_experiment(use_umap="ch", gbm="lgbm")
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -86,5 +83,20 @@ if __name__ == "__main__":
     y_pred = model.predict(X_val)
     y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
 
-    accuracy = accuracy_score(y_val, y_pred_labels)
-    f1 = f1_score(y_val, y_pred_labels)
+    Path("optuna_results").mkdir(exist_ok=True, parents=True)
+    best_trial = {
+        "best_params": lgb_optimizer.best,
+        "accuracy": accuracy_score(y_val, y_pred_labels),
+        "f1": f1_score(y_val, y_pred_labels),
+        "val_loss": model.best_score["valid_0"]["binary_logloss"],
+    }
+    with open("optuna_results/best_trial.pkl", "wb") as bt:
+        pickle.dump(best_trial, bt)
+
+    print("Accuracy: ", accuracy_score(y_val, y_pred_labels))
+    print("F1: ", f1_score(y_val, y_pred_labels))
+
+
+if __name__ == "__main__":
+
+    run_ts_lightgbm_optuna()

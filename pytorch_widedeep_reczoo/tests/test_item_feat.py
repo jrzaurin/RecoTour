@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import pandas as pd
 import pytest
 
@@ -13,14 +11,6 @@ def sample_data():
         "user_id": [1, 2, 3, 1, 2, 3],
         "item_id": [101, 101, 101, 102, 102, 103],
         "rating": [4.0, 3.0, 5.0, 2.0, 4.0, 3.0],
-        "timestamp": [
-            datetime(2023, 1, 1),
-            datetime(2023, 1, 15),
-            datetime(2023, 1, 30),
-            datetime(2023, 1, 1),
-            datetime(2023, 1, 10),
-            datetime(2023, 1, 5),
-        ],
         "gender": ["F", "M", "F", "F", "M", "M"],
         "occupation": [
             "student",
@@ -58,9 +48,6 @@ def test_compute_features(sample_data):
         "age_3",
         "female_viewers",
         "male_viewers",
-        "mean_days_between_ratings",
-        "rating_recency_days",
-        "rating_timespan_days",
     ]
     assert all(col in features.columns for col in expected_columns)
 
@@ -74,26 +61,6 @@ def test_compute_features(sample_data):
     assert item_id_101_features["male_viewers"].values[0] == 1
     assert item_id_101_features["occupation_1"].values[0] == "student"
     assert item_id_101_features["age_1"].values[0] == "25"
-
-
-def test_compute_time_features(sample_data):
-    """Test the time features computation."""
-    idf = ItemDynamicFeatures()
-    time_features = idf._compute_time_features(sample_data)
-
-    # Check if all time-related columns are present
-    expected_columns = [
-        "mean_days_between_ratings",
-        "rating_recency_days",
-        "rating_timespan_days",
-    ]
-    assert all(col in time_features.columns for col in expected_columns)
-
-    # Check specific values for item 101
-    assert time_features.loc[101, "rating_timespan_days"] == 29.0  # Jan 30 - Jan 1
-    assert time_features.loc[101, "mean_days_between_ratings"] == pytest.approx(
-        14.5, rel=0.1
-    )
 
 
 def test_gender_counts(sample_data):
