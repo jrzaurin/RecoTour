@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from rec_zoo.feat_engineering.user_dynamic_feats import UserDynamicFeatures
+from rec_tools.feat_engineering.user_dynamic_feats import UserDynamicFeatures
 
 
 @pytest.fixture

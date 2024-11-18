@@ -9,8 +9,8 @@ from chromadb import Client, Collection
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
-from rec_zoo.tokens_and_api_keys import COHERE_API_KEY
-from rec_zoo.feat_engineering.utils import save_objects
+from rec_tools.tokens_and_api_keys import COHERE_API_KEY
+from rec_tools.feat_engineering.utils import save_objects
 
 
 class OverviewEmbedder:

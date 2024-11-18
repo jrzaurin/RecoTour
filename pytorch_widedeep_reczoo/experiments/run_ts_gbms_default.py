@@ -10,7 +10,7 @@ import lightgbm as lgb
 from sklearn.metrics import f1_score, accuracy_score
 from pytorch_widedeep.utils import LabelEncoder
 
-from rec_zoo.prepare_experiments.prepare_ts import prepare_experiment_ctb_with_text
+from rec_tools.prepare_experiments.prepare_ts import prepare_experiment_ctb_with_text
 
 
 def prepare_data(

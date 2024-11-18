@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from rec_zoo.feat_engineering.item_static_feats import process_genres
+from rec_tools.feat_engineering.item_static_feats import process_genres
 
 
 class UserDynamicFeatures:

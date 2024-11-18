@@ -3,7 +3,7 @@ import torch
 import pytest
 from pytorch_widedeep.metrics import MAP_at_k, NDCG_at_k, HitRatio_at_k, BinaryNDCG_at_k
 
-from rec_zoo.ranking_metrics import (
+from rec_tools.ranking_metrics import (
     map_at_k,
     ndcg_at_k,
     hit_ratio_at_k,

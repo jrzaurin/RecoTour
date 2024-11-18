@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from rec_zoo.split_data.data_splitters import (
+from rec_tools.split_data.data_splitters import (
     TemporalSplitter,
     LastInteractionSplitter,
     LastInteractionSequenceSplitter,

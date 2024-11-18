@@ -8,7 +8,7 @@ from lightgbm import Dataset as lgbDataset
 from sklearn.metrics import f1_score, accuracy_score
 from optuna.integration import lightgbm
 
-from rec_zoo.prepare_experiments.prepare_ts import prepare_experiment
+from rec_tools.prepare_experiments.prepare_ts import prepare_experiment
 
 warnings.filterwarnings("ignore")
 

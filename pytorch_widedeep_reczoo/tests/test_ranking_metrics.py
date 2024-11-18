@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from rec_zoo.ranking_metrics import (
+from rec_tools.ranking_metrics import (
     map_at_k,
     ndcg_at_k,
     reshape_to_2d,

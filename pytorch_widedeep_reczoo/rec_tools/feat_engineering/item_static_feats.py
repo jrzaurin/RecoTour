@@ -3,18 +3,18 @@ from typing import Dict, List
 
 import pandas as pd
 
-from rec_zoo.tokens_and_api_keys import OPENAI_API_KEY
-from rec_zoo.feat_engineering.utils import (
+from rec_tools.tokens_and_api_keys import OPENAI_API_KEY
+from rec_tools.feat_engineering.utils import (
     save_objects,
     load_movielens,
     load_movie_metadata,
 )
-from rec_zoo.feat_engineering.title_matcher import (
+from rec_tools.feat_engineering.title_matcher import (
     TitleMatcher,
     reorder_title,
     extract_year_and_title,
 )
-from rec_zoo.feat_engineering.openai_get_title import process_movies_concurrent
+from rec_tools.feat_engineering.openai_get_title import process_movies_concurrent
 
 
 def process_movie_features(

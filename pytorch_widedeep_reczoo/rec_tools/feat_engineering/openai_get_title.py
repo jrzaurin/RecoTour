@@ -5,7 +5,7 @@ from typing import Dict, List
 from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm
 
-from rec_zoo.tokens_and_api_keys import OPENAI_API_KEY
+from rec_tools.tokens_and_api_keys import OPENAI_API_KEY
 
 
 async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | float]:

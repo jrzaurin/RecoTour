@@ -2,16 +2,16 @@ from typing import Literal
 
 import pandas as pd
 
-from rec_zoo.feat_engineering.utils import (
+from rec_tools.feat_engineering.utils import (
     save_objects,
     load_movielens,
     load_movie_metadata,
     load_movielens_train_val,
 )
-from rec_zoo.feat_engineering.item_static_feats import process_movie_features
-from rec_zoo.feat_engineering.item_dynamic_feats import ItemDynamicFeatures
-from rec_zoo.feat_engineering.user_dynamic_feats import UserDynamicFeatures
-from rec_zoo.feat_engineering.overview_embeddings import (
+from rec_tools.feat_engineering.item_static_feats import process_movie_features
+from rec_tools.feat_engineering.item_dynamic_feats import ItemDynamicFeatures
+from rec_tools.feat_engineering.user_dynamic_feats import UserDynamicFeatures
+from rec_tools.feat_engineering.overview_embeddings import (
     OverviewEmbedder,
     EmbeddingDimensionalityReducer,
 )

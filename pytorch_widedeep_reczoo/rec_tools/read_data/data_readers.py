@@ -6,7 +6,7 @@
 # define the PATH variable for example:
 # export PYTHONPATH=/Users/youruser/ml_projects/RecoTour/pytorch_widedeep_reczoo
 # then to run the script:
-# python rec_zoo/read_data/data_readers.py
+# python rec_tools/read_data/data_readers.py
 # -----------------------------------------------------------------------------
 
 from typing import Optional
