@@ -12,8 +12,9 @@ async def get_movie_details_async(title: str, api_key: str) -> Dict[str, str | f
     client = AsyncOpenAI(api_key=api_key)
 
     prompt = f"""
-    For the movie "{title}", provide an overview of a few sentences and its
-    runtime in minutes.
+    For the movie "{title}", provide a paragraph overview and its runtime in
+    minutes. The overview should be a few sentences long and include the main
+    plot points of the movie.
 
     - Do not include the title of the movie in the overview.
     - If you are unable to find the movie, or are unsure of the details,

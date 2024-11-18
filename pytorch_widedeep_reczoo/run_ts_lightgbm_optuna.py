@@ -1,6 +1,6 @@
 import pickle
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 from pathlib import Path
 
 import lightgbm as lgb
@@ -32,7 +32,7 @@ class LGBOptunaOptimizer(object):
         else:
             params["verbosity"] = -1
 
-        params["early_stopping_rounds"] = 50
+        params["early_stopping_rounds"] = 100
 
         self.tuner = lightgbm.LightGBMTuner(
             params=params,
@@ -50,8 +50,12 @@ class LGBOptunaOptimizer(object):
         self.best["n_estimators"] = 1000  # type: ignore
 
 
-def run_ts_lightgbm_optuna():
-    train_df, val_df, _, encoder = prepare_experiment(use_umap="ch", gbm="lgbm")
+def run_ts_lightgbm_optuna(
+    use_umap: Literal["st", "ch"] = "st",
+    save_dir: str = "results_lgbm_optuna",
+    save_name: str = "optuna_results.pkl",
+):
+    train_df, val_df, _, encoder = prepare_experiment(use_umap=use_umap, gbm="lgbm")
     y_train = train_df["rating"]
     y_val = val_df["rating"]
     X_train = train_df.drop("rating", axis=1)
@@ -83,14 +87,16 @@ def run_ts_lightgbm_optuna():
     y_pred = model.predict(X_val)
     y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
 
-    Path("optuna_results").mkdir(exist_ok=True, parents=True)
+    save_path = Path("results") / save_dir / save_name
+    save_path.parent.mkdir(exist_ok=True, parents=True)
+
     best_trial = {
         "best_params": lgb_optimizer.best,
         "accuracy": accuracy_score(y_val, y_pred_labels),
         "f1": f1_score(y_val, y_pred_labels),
         "val_loss": model.best_score["valid_0"]["binary_logloss"],
     }
-    with open("optuna_results/best_trial.pkl", "wb") as bt:
+    with open(save_path, "wb") as bt:
         pickle.dump(best_trial, bt)
 
     print("Accuracy: ", accuracy_score(y_val, y_pred_labels))

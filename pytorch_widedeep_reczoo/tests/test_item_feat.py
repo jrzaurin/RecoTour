@@ -33,18 +33,15 @@ def test_compute_features(sample_data):
 
     # Check if all expected columns are present
     expected_columns = [
-        "total_ratings",
-        "unique_ratings",
-        "unique_users",
         "rating_median",
         "rating_mean",
         "rating_std",
         "rating_iqr",
         "occupation_1",
-        "occupation_2",
-        "occupation_3",
         "age_1",
+        "occupation_2",
         "age_2",
+        "occupation_3",
         "age_3",
         "female_viewers",
         "male_viewers",
@@ -54,8 +51,6 @@ def test_compute_features(sample_data):
     item_id_101_features = features[features.item_id == 101]
 
     # Check specific values for item 101
-    assert item_id_101_features["total_ratings"].values[0] == 3
-    assert item_id_101_features["unique_users"].values[0] == 3
     assert item_id_101_features["rating_mean"].values[0] == 4.0
     assert item_id_101_features["female_viewers"].values[0] == 2
     assert item_id_101_features["male_viewers"].values[0] == 1
@@ -104,5 +99,4 @@ def test_rating_statistics(sample_data):
     # Check rating statistics for item 101
     assert item_id_101_features["rating_mean"].values[0] == 4.0
     assert item_id_101_features["rating_median"].values[0] == 4.0
-    assert item_id_101_features["unique_ratings"].values[0] == 3
     assert item_id_101_features["rating_iqr"].values[0] == 1.0

@@ -42,7 +42,10 @@ def run_item_static_feat_engineering(debug: bool = False):
         movielens_df, metadata_df, use_llm=False, save_dir="feature_store"
     )
     movies_with_overview_llm = process_movie_features(
-        movielens_df, metadata_df, use_llm=True, save_dir="feature_store"
+        movielens_df,
+        metadata_df,
+        use_llm=True,
+        save_dir="feature_store",
     )
 
     # Merge overviews from both datasets
@@ -187,5 +190,6 @@ if __name__ == "__main__":
     run_item_static_feat_engineering()
 
     for prefix in ["lpi", "li", "ts"]:
+        print(f"Processing {prefix} dataset")
         run_item_dynamic_feat_engineering(prefix)  # type: ignore
         run_user_dynamic_feat_engineering(prefix)  # type: ignore

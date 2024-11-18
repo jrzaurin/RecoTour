@@ -23,8 +23,6 @@ def test_compute_features(sample_data):
 
     # Check if all expected columns are present
     expected_columns = [
-        "total_movies",
-        "unique_movies",
         "total_ratings",
         "rating_mean",
         "rating_std",
@@ -40,8 +38,6 @@ def test_compute_features(sample_data):
     features_user_1 = features[features.user_id == 1]
 
     # Check specific values for user 1
-    assert features_user_1["total_movies"].values[0] == 3
-    assert features_user_1["unique_movies"].values[0] == 3
     assert features_user_1["rating_mean"].values[0] == 4.0
     assert features_user_1["unique_genres_count"].values[0] == 2
     assert features_user_1["favorite_genre_1"].values[0] == "action"

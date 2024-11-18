@@ -16,7 +16,6 @@ class UserDynamicFeatures:
         # Basic count features
         viewing_counts = dfc.groupby("user_id").agg(
             {
-                "item_id": ["count", "nunique"],  # total and unique movies
                 "rating": [
                     "count",
                     "mean",
@@ -35,8 +34,6 @@ class UserDynamicFeatures:
 
         # Flatten column names and rename
         features.columns = [
-            "total_movies",
-            "unique_movies",
             "total_ratings",
             "rating_mean",
             "rating_std",

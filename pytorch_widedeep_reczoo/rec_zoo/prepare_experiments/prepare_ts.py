@@ -91,6 +91,44 @@ def prepare_experiment(
         return train_df, val_df, categorical_cols, None
 
 
+def load_and_merge_features_and_raw_text() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    split_path = Path("train_val_test_splits") / "ts_movielens_splits"
+
+    cols_to_keep = [
+        "user_id",
+        "item_id",
+        "rating",
+        "gender",
+        "age",
+        "occupation",
+        "zipcode",
+    ]
+    train_df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
+    val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
+
+    movie_features = pd.read_csv("feature_store/processed_movie_features_llm.csv")
+    movie_features = movie_features[
+        ["item_id", "genres", "year", "overview", "runtime"]
+    ]
+    movie_features["runtime"] = movie_features["runtime"].replace(
+        0, movie_features["runtime"].median()
+    )
+
+    train_df = train_df.merge(movie_features, on="item_id", how="left")
+    val_df = val_df.merge(movie_features, on="item_id", how="left")
+
+    return train_df, val_df
+
+
+def prepare_experiment_ctb_with_text() -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
+    train_df, val_df = load_and_merge_features_and_raw_text()
+    categorical_cols = find_categorical_cols(train_df)
+    categorical_cols = [
+        col for col in categorical_cols if col not in ["overview", "runtime"]
+    ]
+    return train_df, val_df, categorical_cols
+
+
 if __name__ == "__main__":
 
     train, val, categorical_cols, encoder = prepare_experiment(gbm="lgbm")

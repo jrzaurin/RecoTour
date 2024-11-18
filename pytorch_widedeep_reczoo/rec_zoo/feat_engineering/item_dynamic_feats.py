@@ -9,10 +9,6 @@ class ItemDynamicFeatures:
 
         dfc = df.copy()
 
-        rating_counts = dfc.groupby("item_id").agg(
-            {"rating": ["count", "nunique"], "user_id": "nunique"}
-        )
-
         rating_stats = dfc.groupby("item_id").agg(
             {
                 "rating": [
@@ -30,15 +26,12 @@ class ItemDynamicFeatures:
         gender_counts = dfc.groupby(["item_id", "gender"]).size().unstack(fill_value=0)
 
         features = pd.concat(  # type: ignore
-            [rating_counts, rating_stats, demographic_modes, gender_counts],
+            [rating_stats, demographic_modes, gender_counts],
             axis=1,
         )
 
         # Flatten column names and rename
         features.columns = [
-            "total_ratings",
-            "unique_ratings",
-            "unique_users",
             "rating_median",
             "rating_mean",
             "rating_std",
