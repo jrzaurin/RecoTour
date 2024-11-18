@@ -20,7 +20,7 @@ results/
 weights/
 store/
 *.csv
-
+.vscode
 # tests
 .coverage
 .pytest_cache
