@@ -67,6 +67,9 @@ def load_and_merge_all_features(
     user_dynamic_features_path = (
         Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / "ts_train_udf.csv"
     )
+    umap_results_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / f"umap_results_{use_umap}.csv"
+    )
 
     cols_to_keep = [
         "user_id",
@@ -77,6 +80,7 @@ def load_and_merge_all_features(
         "occupation",
         "zipcode",
     ]
+
     train_df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
     val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
 
@@ -88,10 +92,7 @@ def load_and_merge_all_features(
     movie_features["runtime"] = movie_features["runtime"].replace(
         0, movie_features["runtime"].median()
     )
-    if use_umap == "st":
-        umap_results = pd.read_csv("feature_store/umap_results_st.csv")
-    else:  # use_umap == "ch"
-        umap_results = pd.read_csv("feature_store/umap_results_ch.csv")
+    umap_results = pd.read_csv(umap_results_path)
 
     train_df = train_df.merge(movie_features, on="item_id", how="left")
     val_df = val_df.merge(movie_features, on="item_id", how="left")

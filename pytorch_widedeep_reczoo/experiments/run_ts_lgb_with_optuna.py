@@ -1,3 +1,4 @@
+import json
 import pickle
 import warnings
 from typing import Any, Dict, Literal
@@ -8,7 +9,10 @@ from lightgbm import Dataset as lgbDataset
 from sklearn.metrics import f1_score, accuracy_score
 from optuna.integration import lightgbm
 
-from rec_tools.prepare_experiments.prepare_ts import prepare_experiment
+from rec_tools.prepare_experiments.prepare_ts import (
+    prepare_experiment_with_feature_engineering,
+)
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 
 warnings.filterwarnings("ignore")
 
@@ -52,14 +56,17 @@ class LGBOptunaOptimizer(object):
 
 def run_ts_lightgbm_optuna(
     use_umap: Literal["st", "ch"] = "st",
-    save_dir: str = "results_lgbm_optuna",
-    save_name: str = "optuna_results.pkl",
 ):
-    train_df, val_df, _, encoder = prepare_experiment(use_umap=use_umap, gbm="lgbm")
+    train_df, val_df, _, encoder = prepare_experiment_with_feature_engineering(
+        use_umap=use_umap, gbm="lgbm"
+    )
     y_train = train_df["rating"]
     y_val = val_df["rating"]
     X_train = train_df.drop("rating", axis=1)
     X_val = val_df.drop("rating", axis=1)
+
+    results_dir = Path(DATA_AND_ARTIFACTS_DIR) / "results/results_lgb_with_optuna"
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     lgbtrain = lgbDataset(
         X_train,
@@ -74,11 +81,11 @@ def run_ts_lightgbm_optuna(
         free_raw_data=False,
     )
 
-    lgb_optimizer = LGBOptunaOptimizer()
-    lgb_optimizer.optimize(lgbtrain, lgbvalid)
+    tuner = LGBOptunaOptimizer()
+    tuner.optimize(lgbtrain, lgbvalid)
 
     model = lgb.train(
-        lgb_optimizer.best,
+        tuner.best,
         lgbtrain,
         valid_sets=[lgbvalid],
         callbacks=[lgb.early_stopping(50, verbose=True)],
@@ -87,20 +94,29 @@ def run_ts_lightgbm_optuna(
     y_pred = model.predict(X_val)
     y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
 
-    save_path = Path("results") / save_dir / save_name
-    save_path.parent.mkdir(exist_ok=True, parents=True)
+    accuracy = accuracy_score(y_val, y_pred_labels)
+    f1 = f1_score(y_val, y_pred_labels)
 
     best_trial = {
-        "best_params": lgb_optimizer.best,
-        "accuracy": accuracy_score(y_val, y_pred_labels),
-        "f1": f1_score(y_val, y_pred_labels),
+        "best_params": tuner.best,
+        "accuracy": accuracy,
+        "f1": f1,
         "val_loss": model.best_score["valid_0"]["binary_logloss"],
     }
-    with open(save_path, "wb") as bt:
+
+    save_fname = results_dir / "optuna_results.pkl"
+    with open(save_fname, "wb") as bt:
         pickle.dump(best_trial, bt)
 
-    print("Accuracy: ", accuracy_score(y_val, y_pred_labels))
-    print("F1: ", f1_score(y_val, y_pred_labels))
+    metrics = {
+        "lgbm": {"accuracy": accuracy, "f1": f1},
+    }
+
+    with open(results_dir / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print("Accuracy: ", accuracy)
+    print("F1: ", f1)
 
 
 if __name__ == "__main__":

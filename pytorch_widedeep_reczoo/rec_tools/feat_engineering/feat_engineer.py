@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 import pandas as pd
@@ -15,6 +16,7 @@ from rec_tools.feat_engineering.overview_embeddings import (
     OverviewEmbedder,
     EmbeddingDimensionalityReducer,
 )
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 
 
 def run_item_static_feat_engineering(debug: bool = False):
@@ -89,7 +91,7 @@ def run_item_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
     save_objects(
         [train_idf],
         [f"{prefix}_train_idf.csv"],
-        "feature_store",
+        os.path.join(DATA_AND_ARTIFACTS_DIR, "feature_store"),
     )
 
 
@@ -113,7 +115,7 @@ def run_user_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
     save_objects(
         [train_udf],
         [f"{prefix}_train_udf.csv"],
-        "feature_store",
+        os.path.join(DATA_AND_ARTIFACTS_DIR, "feature_store"),
     )
 
 
@@ -188,9 +190,9 @@ def _merge_movie_overviews(
 
 if __name__ == "__main__":
 
-    run_item_static_feat_engineering()
+    # run_item_static_feat_engineering()
 
     for prefix in ["lpi", "li", "ts"]:
         print(f"Processing {prefix} dataset")
         run_item_dynamic_feat_engineering(prefix)  # type: ignore
-        run_user_dynamic_feat_engineering(prefix)  # type: ignore
+        # run_user_dynamic_feat_engineering(prefix)  # type: ignore

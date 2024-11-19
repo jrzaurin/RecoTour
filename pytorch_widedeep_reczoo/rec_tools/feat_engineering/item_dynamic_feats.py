@@ -9,6 +9,11 @@ class ItemDynamicFeatures:
 
         dfc = df.copy()
 
+        # Add unique reviewers count
+        unique_reviewers = (
+            dfc.groupby("item_id")["user_id"].nunique().to_frame("unique_reviewers")
+        )
+
         rating_stats = dfc.groupby("item_id").agg(
             {
                 "rating": [
@@ -26,7 +31,7 @@ class ItemDynamicFeatures:
         gender_counts = dfc.groupby(["item_id", "gender"]).size().unstack(fill_value=0)
 
         features = pd.concat(  # type: ignore
-            [rating_stats, demographic_modes, gender_counts],
+            [rating_stats, demographic_modes, gender_counts, unique_reviewers],
             axis=1,
         )
 
@@ -44,6 +49,7 @@ class ItemDynamicFeatures:
             "age_3",
             "female_viewers",
             "male_viewers",
+            "unique_reviewers",
         ]
 
         features = features.reset_index()
