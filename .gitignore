@@ -38,3 +38,4 @@ sftp*-config_cpu.json
 
 tokens_and_api_keys.py
 feature_store
+data_and_artifacts
