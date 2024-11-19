@@ -9,6 +9,7 @@ from chromadb import Client, Collection
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 from rec_tools.tokens_and_api_keys import COHERE_API_KEY
 from rec_tools.feat_engineering.utils import save_objects
 
@@ -20,7 +21,7 @@ class OverviewEmbedder:
         self,
         method: Literal["sentence_transformer", "cohere"] = "sentence_transformer",
         model_name: str = "all-mpnet-base-v2",
-        save_dir: str = "feature_store",
+        save_dir: str = f"{DATA_AND_ARTIFACTS_DIR}/feature_store",
         replace: bool = False,
     ):
         """
@@ -135,7 +136,7 @@ class EmbeddingDimensionalityReducer:
         self,
         n_components: int = 5,
         umap_config: Dict[str, Any] | None = None,
-        save_dir: str | None = "feature_store",
+        save_dir: str | None = f"{DATA_AND_ARTIFACTS_DIR}/feature_store",
         save_suffix: Literal["st", "ch"] = "st",
     ):
         """

@@ -39,13 +39,14 @@ def run_item_static_feat_engineering(debug: bool = False):
 
     # Process movie features (dataset is small so we will run both methods)
     movies_with_overview = process_movie_features(
-        movielens_df, metadata_df, use_llm=False, save_dir="feature_store"
+        movielens_df,
+        metadata_df,
+        use_llm=False,
     )
     movies_with_overview_llm = process_movie_features(
         movielens_df,
         metadata_df,
         use_llm=True,
-        save_dir="feature_store",
     )
 
     # Merge overviews from both datasets

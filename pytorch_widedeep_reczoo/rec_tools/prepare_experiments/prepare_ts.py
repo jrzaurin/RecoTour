@@ -4,11 +4,27 @@ from pathlib import Path
 import pandas as pd
 from pytorch_widedeep.utils import LabelEncoder
 
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 
-def load_and_merge_features(
-    use_umap: Literal["st", "ch"] = "st"
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    split_path = Path("train_val_test_splits") / "ts_movielens_splits"
+
+def load_splits() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    split_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "train_val_test_splits" / "ts_movielens_splits"
+    )
+
+    train_df = pd.read_csv(split_path / "train.csv")
+    val_df = pd.read_csv(split_path / "val.csv")
+
+    return train_df, val_df
+
+
+def load_and_merge_features_with_raw_text() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    split_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "train_val_test_splits" / "ts_movielens_splits"
+    )
+    movie_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store/processed_movie_features_llm.csv"
+    )
 
     cols_to_keep = [
         "user_id",
@@ -22,19 +38,60 @@ def load_and_merge_features(
     train_df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
     val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
 
-    ts_train_idf = pd.read_csv("feature_store/ts_train_idf.csv")
-    ts_train_udf = pd.read_csv("feature_store/ts_train_udf.csv")
-    movie_features = pd.read_csv("feature_store/processed_movie_features_llm.csv")
+    movie_features = pd.read_csv(movie_features_path)
+    movie_features = movie_features[
+        ["item_id", "genres", "year", "overview", "runtime"]
+    ]
+    movie_features["runtime"] = movie_features["runtime"].replace(
+        0, movie_features["runtime"].median()
+    )
+
+    train_df = train_df.merge(movie_features, on="item_id", how="left")
+    val_df = val_df.merge(movie_features, on="item_id", how="left")
+
+    return train_df, val_df
+
+
+def load_and_merge_all_features(
+    use_umap: Literal["st", "ch"] = "st"
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    split_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "train_val_test_splits" / "ts_movielens_splits"
+    )
+    movie_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store/processed_movie_features_llm.csv"
+    )
+    item_dynamic_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / "ts_train_idf.csv"
+    )
+    user_dynamic_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / "ts_train_udf.csv"
+    )
+
+    cols_to_keep = [
+        "user_id",
+        "item_id",
+        "rating",
+        "gender",
+        "age",
+        "occupation",
+        "zipcode",
+    ]
+    train_df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
+    val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
+
+    ts_train_idf = pd.read_csv(item_dynamic_features_path)
+    ts_train_udf = pd.read_csv(user_dynamic_features_path)
+
+    movie_features = pd.read_csv(movie_features_path)
     movie_features = movie_features[["item_id", "genres", "year", "runtime"]]
     movie_features["runtime"] = movie_features["runtime"].replace(
         0, movie_features["runtime"].median()
     )
     if use_umap == "st":
         umap_results = pd.read_csv("feature_store/umap_results_st.csv")
-    elif use_umap == "ch":
+    else:  # use_umap == "ch"
         umap_results = pd.read_csv("feature_store/umap_results_ch.csv")
-    else:
-        raise ValueError("Invalid value for use_umap. Use 'st' or 'ch'.")
 
     train_df = train_df.merge(movie_features, on="item_id", how="left")
     val_df = val_df.merge(movie_features, on="item_id", how="left")
@@ -72,11 +129,40 @@ def binarize_target(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def prepare_experiment(
+def prepare_experiment_without_feat_engineering(
+    gbm: Literal["lgbm", "catboost"] = "lgbm",
+) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], LabelEncoder | None]:
+
+    train_df, val_df = load_splits()
+
+    for df in [train_df, val_df]:
+        df.drop(["timestamp", "title"], axis=1, inplace=True)
+        df = binarize_target(df)
+
+    cat_cols = [
+        "user_id",
+        "item_id",
+        "gender",
+        "genres",
+        "age",
+        "occupation",
+        "zipcode",
+    ]
+
+    if gbm == "lgbm":
+        encoder = LabelEncoder(cat_cols)
+        train_encoded = encoder.fit_transform(train_df)
+        val_encoded = encoder.transform(val_df)
+        return train_encoded, val_encoded, cat_cols, encoder
+    else:
+        return train_df, val_df, cat_cols, None
+
+
+def prepare_experiment_with_feature_engineering(
     use_umap: Literal["st", "ch"] = "st",
     gbm: Literal["lgbm", "catboost"] = "lgbm",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], LabelEncoder | None]:
-    train_df, val_df = load_and_merge_features(use_umap)
+    train_df, val_df = load_and_merge_all_features(use_umap)
 
     train_df = binarize_target(train_df)
     val_df = binarize_target(val_df)
@@ -91,37 +177,10 @@ def prepare_experiment(
         return train_df, val_df, categorical_cols, None
 
 
-def load_and_merge_features_and_raw_text() -> Tuple[pd.DataFrame, pd.DataFrame]:
-    split_path = Path("train_val_test_splits") / "ts_movielens_splits"
-
-    cols_to_keep = [
-        "user_id",
-        "item_id",
-        "rating",
-        "gender",
-        "age",
-        "occupation",
-        "zipcode",
-    ]
-    train_df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
-    val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
-
-    movie_features = pd.read_csv("feature_store/processed_movie_features_llm.csv")
-    movie_features = movie_features[
-        ["item_id", "genres", "year", "overview", "runtime"]
-    ]
-    movie_features["runtime"] = movie_features["runtime"].replace(
-        0, movie_features["runtime"].median()
-    )
-
-    train_df = train_df.merge(movie_features, on="item_id", how="left")
-    val_df = val_df.merge(movie_features, on="item_id", how="left")
-
-    return train_df, val_df
-
-
-def prepare_experiment_ctb_with_text() -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-    train_df, val_df = load_and_merge_features_and_raw_text()
+def prepare_experiment_for_catboost_with_text() -> (
+    Tuple[pd.DataFrame, pd.DataFrame, List[str]]
+):
+    train_df, val_df = load_and_merge_features_with_raw_text()
     categorical_cols = find_categorical_cols(train_df)
     categorical_cols = [
         col for col in categorical_cols if col not in ["overview", "runtime"]
@@ -131,5 +190,9 @@ def prepare_experiment_ctb_with_text() -> Tuple[pd.DataFrame, pd.DataFrame, List
 
 if __name__ == "__main__":
 
-    train, val, categorical_cols, encoder = prepare_experiment(gbm="lgbm")
-    train, val, categorical_cols, _ = prepare_experiment(gbm="lgbm")
+    train, val, categorical_cols, encoder = prepare_experiment_with_feature_engineering(
+        gbm="lgbm"
+    )
+    train, val, categorical_cols, _ = prepare_experiment_with_feature_engineering(
+        gbm="catboost"
+    )
