@@ -34,21 +34,30 @@ for user in random_users:
 
     assert num_ratings == num_ratings_fs
 
+    # Get value counts and their values (not indices)
+    genre_counts = user_df["genres"].value_counts()
+    top_3_values = genre_counts.head(3).values
+
+    # Skip if less than 2 unique count values or if top 3 values involve more than 3 genres
+    if (
+        len(set(genre_counts.values)) < 2
+        or len(genre_counts[genre_counts >= top_3_values[2]]) > 3
+    ):
+        print(f"Skipping genre comparison for user {user} - ambiguous top 3 genres")
+        continue
+
     # top 3 genres in original split
-    top_genres = user_df["genres"].value_counts().head(3).index.tolist()
+    top_genres = genre_counts.head(3).index.tolist()
     # replace "|" with "_" and all to lowercase
     top_genres = sorted([genre.replace("|", "_").lower() for genre in top_genres])
-
     # top 3 genres in feature store
     top_genres_fs = sorted(
         ts_train_udf[ts_train_udf["user_id"] == user][
             ["favorite_genre_1", "favorite_genre_2", "favorite_genre_3"]
         ].values[0]
     )
-
     for i, genre in enumerate(top_genres):
         assert genre == top_genres_fs[i]
-
 
 # pick 10 random items and check some features (make it deterministic)
 random_items = ts_train_df["item_id"].sample(10, random_state=42).tolist()
