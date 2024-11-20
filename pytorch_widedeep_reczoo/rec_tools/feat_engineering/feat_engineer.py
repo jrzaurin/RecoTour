@@ -3,6 +3,7 @@ from typing import Literal
 
 import pandas as pd
 
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 from rec_tools.feat_engineering.utils import (
     save_objects,
     load_movielens,
@@ -16,7 +17,6 @@ from rec_tools.feat_engineering.overview_embeddings import (
     OverviewEmbedder,
     EmbeddingDimensionalityReducer,
 )
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 
 
 def run_item_static_feat_engineering(debug: bool = False):

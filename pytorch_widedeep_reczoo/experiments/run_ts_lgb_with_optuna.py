@@ -9,10 +9,10 @@ from lightgbm import Dataset as lgbDataset
 from sklearn.metrics import f1_score, accuracy_score
 from optuna.integration import lightgbm
 
+from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 from rec_tools.prepare_experiments.prepare_ts import (
     prepare_experiment_with_feature_engineering,
 )
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
 
 warnings.filterwarnings("ignore")
 
