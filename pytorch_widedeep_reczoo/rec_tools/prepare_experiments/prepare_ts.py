@@ -125,6 +125,26 @@ def find_categorical_cols(train_df: pd.DataFrame) -> list[str]:
     return categorical_cols
 
 
+def impute_float_categorical_cols(
+    df: pd.DataFrame, categorical_cols: List[str]
+) -> pd.DataFrame:
+    # first, if there are any float cols, replace nans with -1 and cast to int
+    float_categorical_cols = [
+        col for col in categorical_cols if df[col].dtype == "float64"
+    ]
+    df[float_categorical_cols] = df[float_categorical_cols].fillna(-1).astype(int)
+
+    # finally, if there is any cat col left, if is object, replace with
+    # "nan_cat", if is int, replace with -1
+    for col in categorical_cols:
+        if df[col].dtype == "object":
+            df[col] = df[col].fillna("nan_cat")
+        elif df[col].dtype == "int64":
+            df[col] = df[col].fillna(-1)
+
+    return df
+
+
 def binarize_target(df: pd.DataFrame) -> pd.DataFrame:
     df["rating"] = (df["rating"] >= 4).astype(int)
     return df
@@ -169,6 +189,9 @@ def prepare_experiment_with_feature_engineering(
     val_df = binarize_target(val_df)
 
     categorical_cols = find_categorical_cols(train_df)
+    train_df = impute_float_categorical_cols(train_df, categorical_cols)
+    val_df = impute_float_categorical_cols(val_df, categorical_cols)
+
     if gbm == "lgbm":
         encoder = LabelEncoder(columns_to_encode=categorical_cols)
         train_encoded = encoder.fit_transform(train_df)

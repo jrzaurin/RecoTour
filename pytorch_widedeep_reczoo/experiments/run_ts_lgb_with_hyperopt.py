@@ -49,26 +49,28 @@ class LGBOptimizerHyperopt(object):
         )
         self.trials = trials
         best = space_eval(param_space, trials.argmin)
-        best["n_estimators"] = int(best["n_estimators"])
         best["num_leaves"] = int(best["num_leaves"])
         best["min_child_samples"] = int(best["min_child_samples"])
         best["verbose"] = -1
         best["objective"] = "binary"
+
+        # just a big number, since it will run with early stopping
+        best["n_estimators"] = 1000
+
         self.best.update(best)
 
     def get_objective(self, dtrain: lgbDataset, deval: lgbDataset):
         def objective(params: Dict[str, Any]) -> float:
 
             # hyperopt casts as float
-            params["n_estimators"] = int(params["n_estimators"])
-            params["num_leaves"] = int(params["num_leaves"])
-            params["min_child_samples"] = int(params["min_child_samples"])
+            params["n_estimators"] = 1000
             params["verbose"] = -1
             params["seed"] = 1
-
             params["feature_pre_filter"] = False
-
             params["objective"] = "binary"
+
+            params["num_leaves"] = int(params["num_leaves"])
+            params["min_child_samples"] = int(params["min_child_samples"])
 
             model = lgb.train(
                 params,
@@ -96,7 +98,6 @@ class LGBOptimizerHyperopt(object):
     ) -> Dict[str, Any]:
         space = {
             "learning_rate": hp.uniform("learning_rate", 0.01, 0.3),
-            "n_estimators": hp.quniform("n_estimators", 100, 1000, 50),
             "num_leaves": hp.quniform("num_leaves", 20, 200, 10),
             "min_child_samples": hp.quniform("min_child_samples", 20, 100, 20),
             "colsample_bytree": hp.uniform("colsample_bytree", 0.5, 1.0),
