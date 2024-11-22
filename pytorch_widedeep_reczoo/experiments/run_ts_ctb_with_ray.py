@@ -53,9 +53,10 @@ def train_catboost(
     model = ctb.train(
         pool=train_pool,
         params={
-            "iterations": 1000,
+            "iterations": 5,
             "early_stopping_rounds": 50,
             "verbose": 0,
+            "loss_function": "Logloss",
             "learning_rate": config["learning_rate"],
             "depth": config["depth"],
             "l2_leaf_reg": config["l2_leaf_reg"],
@@ -80,7 +81,7 @@ def train_catboost(
 
 def run_optimization(
     optimizer: Literal["tpe", "hyperband"] = "tpe",
-    num_trials: int = 5,
+    num_trials: int = 200,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
@@ -104,7 +105,7 @@ def run_optimization(
 
     # Define search space
     search_space = {
-        "learning_rate": tune.loguniform(1e-4, 3e-1),
+        "learning_rate": tune.loguniform(1e-3, 3e-1),
         "depth": tune.randint(4, 10),
         "l2_leaf_reg": tune.loguniform(1e-4, 1.0),
         "min_data_in_leaf": tune.qrandint(5, 50, 5),
@@ -168,7 +169,7 @@ def run_optimization(
 
         with open(
             Path(results_dir)
-            / f"results_catboost_ray_{optimizer}"
+            / f"results_ctb_ray_{optimizer}"
             / "best_experiment_info.json",
             "w",
         ) as f:
@@ -181,5 +182,5 @@ def run_optimization(
 
 
 if __name__ == "__main__":
-    run_optimization(optimizer="tpe")
+    # run_optimization(optimizer="tpe")
     run_optimization(optimizer="hyperband")

@@ -113,6 +113,58 @@ def load_and_merge_all_features(
     return train_df, val_df
 
 
+def load_and_merge_test_data(use_umap: Literal["st", "ch"] = "st") -> pd.DataFrame:
+    # TODO: fix the code repetition
+    test_path = (
+        Path(DATA_AND_ARTIFACTS_DIR)
+        / "train_val_test_splits"
+        / "movielens_splits"
+        / "test.csv"
+    )
+    movie_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store/processed_movie_features_llm.csv"
+    )
+    item_dynamic_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / "ts_train_idf.csv"
+    )
+    user_dynamic_features_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / "ts_train_udf.csv"
+    )
+    umap_results_path = (
+        Path(DATA_AND_ARTIFACTS_DIR) / "feature_store" / f"umap_results_{use_umap}.csv"
+    )
+    cols_to_keep = [
+        "user_id",
+        "item_id",
+        "rating",
+        "gender",
+        "age",
+        "occupation",
+        "zipcode",
+    ]
+
+    test_df = pd.read_csv(test_path)[cols_to_keep]
+
+    ts_train_idf = pd.read_csv(item_dynamic_features_path)
+    ts_train_udf = pd.read_csv(user_dynamic_features_path)
+
+    movie_features = pd.read_csv(movie_features_path)
+    movie_features = movie_features[["item_id", "genres", "year", "runtime"]]
+    movie_features["runtime"] = movie_features["runtime"].replace(
+        0, movie_features["runtime"].median()
+    )
+    umap_results = pd.read_csv(umap_results_path)
+
+    test_df = test_df.merge(movie_features, on="item_id", how="left")
+    test_df = test_df.merge(ts_train_idf, on="item_id", how="left")
+    test_df = test_df.merge(
+        ts_train_udf, on="user_id", how="left", suffixes=("_item", "_user")
+    )
+    test_df = test_df.merge(umap_results, on="item_id", how="left")
+
+    return test_df
+
+
 def find_categorical_cols(train_df: pd.DataFrame) -> list[str]:
     categorical_cols = ["user_id", "item_id"]
     for col in train_df.columns:

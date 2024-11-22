@@ -46,10 +46,9 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
     trial = 0
 
     params = {
-        "num_iterations": 500,
+        "num_iterations": 1000,
         "objective": "binary",
         "metric": "binary_logloss",
-        "feature_fraction": 1.0,
         "verbose": -1,
     }
 
@@ -61,7 +60,7 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
             train_data,
             valid_sets=[val_data],
             callbacks=[
-                lgb.early_stopping(50),
+                lgb.early_stopping(100),
             ],
         )
 
@@ -78,11 +77,13 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
             "val_loss": val_loss,
         }
 
-        importance = model.feature_importance(importance_type="gain")
+        importance = model.feature_importance(importance_type="split")
         feature_importance = pd.DataFrame(
             {"feature": current_features, "importance": importance}
         )
 
+        # if there are features with 0 importance, remove them
+        feature_importance = feature_importance[feature_importance["importance"] > 0]
         least_important = feature_importance.nsmallest(1, "importance")["feature"].iloc[
             0
         ]
@@ -106,6 +107,12 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
         )
 
         trial += 1
+
+        print("-" * 100)
+        print(
+            f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
+        )
+        print("-" * 100)
 
     results_dir = (
         Path(DATA_AND_ARTIFACTS_DIR) / "results" / "results_lgb_feature_elimination"
