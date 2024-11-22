@@ -87,6 +87,7 @@ def run_lgb_feature_elimination(
             "acc": accuracy,
             "f1": f1,
             "val_loss": val_loss,
+            "best_iteration": model.best_iteration,
         }
 
         importance = model.feature_importance(importance_type="split")

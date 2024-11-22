@@ -3,6 +3,29 @@ from typing import Optional
 import numpy as np
 
 
+def shuffle_arrays_consistently(
+    array1: np.ndarray, array2: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Shuffle two 2D arrays consistently along the row axis (columns)
+
+    Args:
+        array1: First array to shuffle
+        array2: Second array to shuffle
+
+    Returns:
+        Tuple of (shuffled_array1, shuffled_array2)
+    """
+    if array1.shape != array2.shape:
+        raise ValueError("Arrays must have the same shape")
+
+    perm = np.random.permutation(array1.shape[1])
+
+    shuffled1 = array1[:, perm]
+    shuffled2 = array2[:, perm]
+
+    return shuffled1, shuffled2
+
+
 def reshape_to_2d(array: np.ndarray, n_columns: int) -> np.ndarray:
     """Reshape 1D or 2D array with one column to 2D array with n_columns"""
     if array.ndim == 1:
@@ -68,6 +91,7 @@ def binary_ndcg_at_k(
     n_items: int = 10,
     k: Optional[int] = None,
     eps: float = 1e-8,
+    shuffle: bool = True,
 ) -> float:
     """NumPy implementation of NDCG@k for binary relevance scores"""
     if k is None:
@@ -76,6 +100,9 @@ def binary_ndcg_at_k(
     # Reshape inputs
     y_pred_2d = reshape_to_2d(y_pred, n_items)
     y_true_2d = reshape_to_2d(y_true, n_items)
+
+    if shuffle:
+        y_pred_2d, y_true_2d = shuffle_arrays_consistently(y_pred_2d, y_true_2d)
 
     # Get top k indices
     top_k_indices = np.argsort(-y_pred_2d, axis=1)[:, :k]
@@ -100,7 +127,11 @@ def binary_ndcg_at_k(
 
 
 def map_at_k(
-    y_pred: np.ndarray, y_true: np.ndarray, n_items: int = 10, k: Optional[int] = None
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    n_items: int = 10,
+    k: Optional[int] = None,
+    shuffle: bool = True,
 ) -> float:
     """NumPy implementation of MAP@k"""
     if k is None:
@@ -109,6 +140,9 @@ def map_at_k(
     # Reshape inputs
     y_pred_2d = reshape_to_2d(y_pred, n_items)
     y_true_2d = reshape_to_2d(y_true, n_items)
+
+    if shuffle:
+        y_pred_2d, y_true_2d = shuffle_arrays_consistently(y_pred_2d, y_true_2d)
 
     # Get top k indices
     top_k_indices = np.argsort(-y_pred_2d, axis=1)[:, :k]
@@ -129,7 +163,11 @@ def map_at_k(
 
 
 def hit_ratio_at_k(
-    y_pred: np.ndarray, y_true: np.ndarray, n_items: int = 10, k: Optional[int] = None
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    n_items: int = 10,
+    k: Optional[int] = None,
+    shuffle: bool = True,
 ) -> float:
     """NumPy implementation of HR@k"""
     if k is None:
@@ -138,6 +176,9 @@ def hit_ratio_at_k(
     # Reshape inputs
     y_pred_2d = reshape_to_2d(y_pred, n_items)
     y_true_2d = reshape_to_2d(y_true, n_items)
+
+    if shuffle:
+        y_pred_2d, y_true_2d = shuffle_arrays_consistently(y_pred_2d, y_true_2d)
 
     # Get top k indices
     top_k_indices = np.argsort(-y_pred_2d, axis=1)[:, :k]

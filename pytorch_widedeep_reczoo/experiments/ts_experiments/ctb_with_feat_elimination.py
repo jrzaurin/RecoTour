@@ -141,6 +141,7 @@ def run_catboost_feature_elimination(
             "acc": accuracy,
             "f1": f1,
             "val_loss": val_loss,
+            "best_iteration": model.get_best_iteration(),
         }
 
         importance = model.get_feature_importance()
