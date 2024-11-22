@@ -1,5 +1,4 @@
 import json
-import pickle
 import warnings
 from typing import Any, Dict, Literal
 from pathlib import Path
@@ -8,11 +7,10 @@ import lightgbm as lgb
 from hyperopt import Trials, hp, tpe, fmin, space_eval
 from lightgbm import Dataset as lgbDataset
 from sklearn.metrics import f1_score, accuracy_score
+from pytorch_widedeep.utils import LabelEncoder
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_with_feature_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
 
 warnings.filterwarnings("ignore")
 
@@ -114,19 +112,20 @@ class LGBOptimizerHyperopt(object):
             return space
 
 
-def run_ts_lgb_with_hyperopt(
-    use_umap: Literal["st", "ch"] = "st",
-):
-    train_df, val_df, _, encoder = prepare_experiment_with_feature_engineering(
-        use_umap=use_umap, gbm="lgbm"
-    )
+def run_ts_lgb_with_hyperopt(use_umap: Literal["st", "ch"]) -> None:
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
 
-    y_train = train_df["rating"]
-    y_val = val_df["rating"]
-    X_train = train_df.drop("rating", axis=1)
-    X_val = val_df.drop("rating", axis=1)
+    encoder = LabelEncoder(columns_to_encode=cat_cols)
 
-    results_dir = Path(DATA_AND_ARTIFACTS_DIR) / "results/results_lgb_with_hyperopt"
+    train_df_encoded = encoder.fit_transform(train_df)
+    val_df_encoded = encoder.transform(val_df)
+
+    y_train = train_df_encoded["rating"]
+    y_val = val_df_encoded["rating"]
+    X_train = train_df_encoded.drop("rating", axis=1)
+    X_val = val_df_encoded.drop("rating", axis=1)
+
+    results_dir = Path(RESULTS_DIR) / f"results_lgb_with_hyperopt_{use_umap}"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     lgbtrain = lgbDataset(
@@ -143,7 +142,7 @@ def run_ts_lgb_with_hyperopt(
     )
 
     tuner = LGBOptimizerHyperopt(verbose=True)
-    tuner.optimize(lgbtrain, lgbvalid)
+    tuner.optimize(lgbtrain, lgbvalid, maxevals=5)
 
     model = lgb.train(
         tuner.best,
@@ -165,20 +164,12 @@ def run_ts_lgb_with_hyperopt(
         "val_loss": model.best_score["valid_0"]["binary_logloss"],
     }
 
-    save_fname = results_dir / "hyperopt_results.pkl"
-    with open(save_fname, "wb") as bt:
-        pickle.dump(best_trial, bt)
-
-    metrics = {
-        "lgbm": {"accuracy": accuracy, "f1": f1},
-    }
-
-    with open(results_dir / "metrics.json", "w") as f:
-        json.dump(metrics, f, indent=4)
+    with open(results_dir / "best_trial.json", "w") as f:
+        json.dump(best_trial, f, indent=4)
 
     print("Accuracy: ", accuracy)
     print("F1: ", f1)
 
 
 if __name__ == "__main__":
-    run_ts_lgb_with_hyperopt(use_umap="st")
+    run_ts_lgb_with_hyperopt(use_umap="ch")

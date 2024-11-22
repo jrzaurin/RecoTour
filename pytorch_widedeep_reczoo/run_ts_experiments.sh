@@ -1,0 +1,9 @@
+python experiments/ts_experiments/lgb_with_default_params.py
+python experiments/ts_experiments/lgb_with_feat_elimination.py
+python experiments/ts_experiments/lgb_with_optuna.py
+python experiments/ts_experiments/lgb_with_ray.py
+python experiments/ts_experiments/lgb_with_hyperopt.py
+python experiments/ts_experiments/ctb_with_default_params.py
+python experiments/ts_experiments/ctb_with_feat_elimination.py
+python experiments/ts_experiments/ctb_with_text_and_default_params.py
+python experiments/ts_experiments/ctb_with_ray.py

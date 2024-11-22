@@ -13,10 +13,8 @@ from sklearn.metrics import f1_score, accuracy_score
 from ray.tune.schedulers import HyperBandScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_with_feature_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
 
 warnings.filterwarnings("ignore")
 
@@ -53,7 +51,7 @@ def train_catboost(
     model = ctb.train(
         pool=train_pool,
         params={
-            "iterations": 5,
+            "iterations": 500,
             "early_stopping_rounds": 50,
             "verbose": 0,
             "loss_function": "Logloss",
@@ -80,8 +78,9 @@ def train_catboost(
 
 
 def run_optimization(
-    optimizer: Literal["tpe", "hyperband"] = "tpe",
-    num_trials: int = 200,
+    use_umap: Literal["st", "ch"],
+    optimizer: Literal["tpe", "hyperband"],
+    num_trials: int = 100,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
@@ -94,9 +93,7 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols, _ = prepare_experiment_with_feature_engineering(
-        use_umap="ch", gbm="catboost"
-    )
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -123,7 +120,7 @@ def run_optimization(
 
         # Update results directory path
         results_dir = os.path.abspath(
-            "/".join([DATA_AND_ARTIFACTS_DIR, "results", "results_ctb_with_ray"])
+            "/".join([RESULTS_DIR, f"results_ctb_with_ray_{use_umap}"])
         )
 
         tuner = tune.Tuner(
@@ -182,5 +179,5 @@ def run_optimization(
 
 
 if __name__ == "__main__":
-    # run_optimization(optimizer="tpe")
-    run_optimization(optimizer="hyperband")
+    run_optimization(optimizer="tpe", use_umap="ch")
+    run_optimization(optimizer="hyperband", use_umap="ch")

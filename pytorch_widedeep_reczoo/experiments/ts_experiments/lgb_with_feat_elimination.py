@@ -1,27 +1,37 @@
 import pickle
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple, Literal
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
 from sklearn.metrics import f1_score, accuracy_score
+from pytorch_widedeep.utils import LabelEncoder
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_with_feature_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
 
 
-def create_initial_datasets():
-    train_df, val_df, cat_cols, _ = prepare_experiment_with_feature_engineering(
-        use_umap="ch", gbm="lgbm"
-    )
+def create_initial_datasets(use_umap: Literal["st", "ch"]) -> Tuple[
+    lgb.Dataset,
+    lgb.Dataset,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.Series,
+    pd.Series,
+    List[str],
+]:
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
 
-    y_train = train_df["rating"]
-    y_val = val_df["rating"]
-    X_train = train_df.drop("rating", axis=1)
-    X_val = val_df.drop("rating", axis=1)
+    encoder = LabelEncoder(columns_to_encode=cat_cols)
+
+    train_df_encoded = encoder.fit_transform(train_df)
+    val_df_encoded = encoder.transform(val_df)
+
+    y_train = train_df_encoded["rating"]
+    y_val = val_df_encoded["rating"]
+    X_train = train_df_encoded.drop("rating", axis=1)
+    X_val = val_df_encoded.drop("rating", axis=1)
 
     train_data = lgb.Dataset(
         X_train, label=y_train, categorical_feature=cat_cols, free_raw_data=False
@@ -37,9 +47,11 @@ def create_initial_datasets():
     return train_data, val_data, X_train, X_val, y_train, y_val, cat_cols
 
 
-def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
+def run_lgb_feature_elimination(
+    use_umap: Literal["st", "ch"]
+) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets()
+        create_initial_datasets(use_umap)
     )
 
     results = {}
@@ -60,7 +72,7 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
             train_data,
             valid_sets=[val_data],
             callbacks=[
-                lgb.early_stopping(100),
+                lgb.early_stopping(50),
             ],
         )
 
@@ -114,15 +126,15 @@ def run_lgb_feature_elimination() -> Dict[int, Dict[str, Any]]:
         )
         print("-" * 100)
 
-    results_dir = (
-        Path(DATA_AND_ARTIFACTS_DIR) / "results" / "results_lgb_feature_elimination"
-    )
+    results_dir = Path(RESULTS_DIR) / f"results_lgb_feature_elimination_{use_umap}"
     results_dir.mkdir(parents=True, exist_ok=True)
-    with open(results_dir / "results.pkl", "wb") as f:
+
+    save_fname = results_dir / "results.pkl"
+    with open(save_fname, "wb") as f:
         pickle.dump(results, f)
 
     return results
 
 
 if __name__ == "__main__":
-    results = run_lgb_feature_elimination()
+    results = run_lgb_feature_elimination(use_umap="ch")

@@ -3,7 +3,7 @@ from typing import Dict, List
 
 import pandas as pd
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
+from rec_tools.constants import DATA_DIR, FEATURE_STORE_DIR
 from rec_tools.tokens_and_api_keys import OPENAI_API_KEY
 from rec_tools.feat_engineering.utils import (
     save_objects,
@@ -22,7 +22,7 @@ def process_movie_features(
     movies_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     use_llm: bool = False,
-    save_dir: str | None = f"{DATA_AND_ARTIFACTS_DIR}/feature_store",
+    save_dir: str | None = f"{DATA_DIR}/{FEATURE_STORE_DIR}",
     replace: bool = False,
 ) -> pd.DataFrame:
     """Process movie features by extracting and enriching movie information.

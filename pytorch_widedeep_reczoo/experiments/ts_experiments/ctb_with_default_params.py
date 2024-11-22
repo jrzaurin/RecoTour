@@ -9,10 +9,8 @@ import catboost as ctb
 # import lightgbm as lgb
 from sklearn.metrics import f1_score, accuracy_score
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_without_feat_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_without_feat_engineering
 
 
 def train_catboost(
@@ -28,7 +26,7 @@ def train_catboost(
         pool=train_pool,
         params={
             "loss_function": "Logloss",
-            "eval_metric": "Accuracy",
+            "eval_metric": "Logloss",
             "early_stopping_rounds": 50,
             "allow_writing_files": False,
         },
@@ -45,18 +43,14 @@ def train_catboost(
 
 
 def main() -> None:
-    train_df, val_df, cat_cols, _ = prepare_experiment_without_feat_engineering(
-        gbm="catboost"
-    )
+    train_df, val_df, cat_cols = experiment_without_feat_engineering()
 
     X_train = train_df.drop("rating", axis=1)
     y_train = train_df["rating"]
     X_val = val_df.drop("rating", axis=1)
     y_val = val_df["rating"]
 
-    results_dir = (
-        Path(DATA_AND_ARTIFACTS_DIR) / "results/results_ctb_with_default_params"
-    )
+    results_dir = Path(RESULTS_DIR) / "results_ctb_with_default_params"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     ctb_model, ctb_acc, ctb_f1 = train_catboost(
@@ -67,7 +61,11 @@ def main() -> None:
         pickle.dump(ctb_model, f)
 
     metrics = {
-        "catboost": {"accuracy": ctb_acc, "f1": ctb_f1},
+        "catboost": {
+            "accuracy": ctb_acc,
+            "f1": ctb_f1,
+            "val_loss": ctb_model.get_best_score()["validation"]["Logloss"],
+        },
     }
 
     with open(results_dir / "metrics.json", "w") as f:

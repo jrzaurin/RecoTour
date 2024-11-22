@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import load_and_merge_all_features
+from rec_tools.constants import DATA_DIR, FEATURE_STORE_DIR
+from rec_tools.prepare_experiments.prepare_ts import load_and_merge_features
 
-feature_store_path = Path(DATA_AND_ARTIFACTS_DIR) / "feature_store"
-splits_path = Path(DATA_AND_ARTIFACTS_DIR) / "train_val_test_splits"
+feature_store_path = Path(DATA_DIR) / FEATURE_STORE_DIR
+splits_path = Path(DATA_DIR) / "train_val_test_splits"
 temporal_splits_path = splits_path / "ts_movielens_splits"
 
 # item dynamic features
@@ -19,7 +19,7 @@ ts_train_udf = pd.read_csv(feature_store_path / "ts_train_udf.csv")
 ts_train_df = pd.read_csv(temporal_splits_path / "train.csv")
 
 # let's also do a check for the train dataset loaded with feature engineering
-train_df, _ = load_and_merge_all_features(use_umap="st")
+train_df, _ = load_and_merge_features(use_umap="st")
 
 # pick 10 random users and check some features (make it deterministic)
 random_users = ts_train_df["user_id"].sample(10).tolist()

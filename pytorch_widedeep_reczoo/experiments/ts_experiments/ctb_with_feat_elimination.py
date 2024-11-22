@@ -1,5 +1,5 @@
 import pickle
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple, Literal
 from pathlib import Path
 
 import pandas as pd
@@ -7,16 +7,14 @@ import catboost as ctb
 from catboost import Pool
 from sklearn.metrics import f1_score, accuracy_score
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_with_feature_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
 
 
-def create_initial_datasets():
-    train_df, val_df, cat_cols, _ = prepare_experiment_with_feature_engineering(
-        use_umap="ch", gbm="catboost"
-    )
+def create_initial_datasets(
+    use_umap: Literal["st", "ch"]
+) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -29,9 +27,11 @@ def create_initial_datasets():
     return train_data, val_data, X_train, X_val, y_train, y_val, cat_cols
 
 
-def run_catboost_feature_elimination() -> Dict[int, Dict[str, Any]]:
+def run_catboost_feature_elimination(
+    use_umap: Literal["st", "ch"]
+) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets()
+        create_initial_datasets(use_umap)
     )
 
     results = {}
@@ -175,9 +175,7 @@ def run_catboost_feature_elimination() -> Dict[int, Dict[str, Any]]:
         )
         print("-" * 100)
 
-    results_dir = (
-        Path(DATA_AND_ARTIFACTS_DIR) / "results" / "results_ctb_feature_elimination"
-    )
+    results_dir = Path(RESULTS_DIR) / "results_ctb_feature_elimination"
     results_dir.mkdir(parents=True, exist_ok=True)
     with open(results_dir / "results.pkl", "wb") as f:
         pickle.dump(results, f)
@@ -186,4 +184,4 @@ def run_catboost_feature_elimination() -> Dict[int, Dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    results = run_catboost_feature_elimination()
+    results = run_catboost_feature_elimination(use_umap="ch")

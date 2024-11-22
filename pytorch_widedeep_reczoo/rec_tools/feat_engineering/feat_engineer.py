@@ -1,9 +1,20 @@
+# In pple this file could be run on the root of the project. Also could be
+# run only once, although if run again the classes will simply print that the
+# files already exist and return the dataframes. to run, make sure the data
+# directory exists and contains the raw data. Also make sure you properly
+# -----------------------------------------------------------------------------
+# define the PATH variable for example:
+# export PYTHONPATH=/Users/youruser/ml_projects/RecoTour/pytorch_widedeep_reczoo
+# then to run the script:
+# python rec_tools/feat_engineering/feat_engineer.py
+# -----------------------------------------------------------------------------
+
 import os
 from typing import Literal
 
 import pandas as pd
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
+from rec_tools.constants import DATA_DIR, FEATURE_STORE_DIR
 from rec_tools.feat_engineering.utils import (
     save_objects,
     load_movielens,
@@ -91,7 +102,7 @@ def run_item_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
     save_objects(
         [train_idf],
         [f"{prefix}_train_idf.csv"],
-        os.path.join(DATA_AND_ARTIFACTS_DIR, "feature_store"),
+        os.path.join(DATA_DIR, FEATURE_STORE_DIR),
     )
 
 
@@ -115,7 +126,7 @@ def run_user_dynamic_feat_engineering(prefix: Literal["lpi", "li", "ts"]):
     save_objects(
         [train_udf],
         [f"{prefix}_train_udf.csv"],
-        os.path.join(DATA_AND_ARTIFACTS_DIR, "feature_store"),
+        os.path.join(DATA_DIR, FEATURE_STORE_DIR),
     )
 
 
@@ -190,9 +201,9 @@ def _merge_movie_overviews(
 
 if __name__ == "__main__":
 
-    # run_item_static_feat_engineering()
+    run_item_static_feat_engineering()
 
     for prefix in ["lpi", "li", "ts"]:
         print(f"Processing {prefix} dataset")
         run_item_dynamic_feat_engineering(prefix)  # type: ignore
-        # run_user_dynamic_feat_engineering(prefix)  # type: ignore
+        run_user_dynamic_feat_engineering(prefix)  # type: ignore

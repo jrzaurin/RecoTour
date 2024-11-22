@@ -1,3 +1,33 @@
+# In pple this file could be run on the root of the project. Also could be
+# run only once, although if run again the classes will simply print that the
+# files already exist and return the dataframes. to run, make sure the data
+# directory exists and contains the raw data. Also make sure you properly
+# -----------------------------------------------------------------------------
+# define the PATH variable for example:
+# export PYTHONPATH=/Users/youruser/ml_projects/RecoTour/pytorch_widedeep_reczoo
+# then to run the script:
+# python rec_tools/split_data/data_splitters.py
+# -----------------------------------------------------------------------------
+# This will create the train/val/test splits for the movielens and amazon datasets
+# and save them in the data/train_val_test_splits directory. with the following structure:
+# data/
+#     train_val_test_splits/
+#         li_movielens_splits/
+#             train.csv
+#             val.csv
+#         lis_movielens_splits/
+#             train.csv
+#             val.csv
+#         lpi_movielens_splits/
+#             train.csv
+#             val.csv
+#         movielens_splits/
+#             full_train.csv
+#             test.csv
+#         ts_movielens_splits/
+#             train.csv
+#             val.csv
+
 import random
 import multiprocessing as mp
 from abc import ABC, abstractmethod
@@ -7,6 +37,8 @@ from functools import partial
 
 import pandas as pd
 from tqdm import tqdm
+
+from rec_tools.constants import TRAIN_VAL_TEST_SPLITS_DIR
 
 
 class BaseDataSplitter(ABC):
@@ -40,7 +72,7 @@ class BaseDataSplitter(ABC):
         self.dataset = dataset
         self.user_column = user_column
         self.item_column = item_column
-        self.root_dir = Path("train_val_test_splits")
+        self.root_dir = Path(TRAIN_VAL_TEST_SPLITS_DIR)
         self.read_path = self.root_dir / f"{dataset}_splits"
         prefix = f"{split_prefix}_" if split_prefix else ""
         self.save_path = self.root_dir / f"{prefix}{dataset}_splits"

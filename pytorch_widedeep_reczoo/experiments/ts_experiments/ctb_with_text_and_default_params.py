@@ -9,10 +9,8 @@ import catboost as ctb
 # import lightgbm as lgb
 from sklearn.metrics import f1_score, accuracy_score
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_for_catboost_with_text,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_for_catboost_with_text
 
 
 def train_catboost_with_text(
@@ -39,7 +37,7 @@ def train_catboost_with_text(
         pool=train_pool,
         params={
             "loss_function": "Logloss",
-            "eval_metric": "Accuracy",
+            "eval_metric": "Logloss",
             "early_stopping_rounds": 50,
             "allow_writing_files": False,
         },
@@ -56,21 +54,14 @@ def train_catboost_with_text(
 
 
 def main():
-    train_df, val_df, cat_cols = prepare_experiment_for_catboost_with_text()
-
-    # binarize rating
-    train_df["rating"] = (train_df["rating"] >= 4).astype(int)
-    val_df["rating"] = (val_df["rating"] >= 4).astype(int)
+    train_df, val_df, cat_cols = experiment_for_catboost_with_text()
 
     X_train = train_df.drop("rating", axis=1)
     y_train = train_df["rating"]
     X_val = val_df.drop("rating", axis=1)
     y_val = val_df["rating"]
 
-    results_dir = (
-        Path(DATA_AND_ARTIFACTS_DIR)
-        / "results/results_ctb_with_text_and_default_params"
-    )
+    results_dir = Path(RESULTS_DIR) / "results_ctb_with_text_and_default_params"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     ctb_model, ctb_acc, ctb_f1 = train_catboost_with_text(
@@ -81,7 +72,11 @@ def main():
         pickle.dump(ctb_model, f)
 
     metrics = {
-        "catboost": {"accuracy": ctb_acc, "f1": ctb_f1},
+        "catboost": {
+            "accuracy": ctb_acc,
+            "f1": ctb_f1,
+            "val_loss": ctb_model.get_best_score()["validation"]["Logloss"],
+        },
     }
 
     with open(results_dir / "metrics.json", "w") as f:

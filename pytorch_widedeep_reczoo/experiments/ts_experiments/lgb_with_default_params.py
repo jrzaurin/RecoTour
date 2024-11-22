@@ -5,15 +5,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-# import catboost as ctb
 import lightgbm as lgb
 from sklearn.metrics import f1_score, accuracy_score
+from pytorch_widedeep.utils import LabelEncoder
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_without_feat_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_without_feat_engineering
 
 
 def train_lightgbm(
@@ -32,6 +29,7 @@ def train_lightgbm(
 
     model = lgb.train(
         {
+            "n_estimators": 1000,
             "objective": "binary",
             "metric": "binary_logloss",
         },
@@ -51,27 +49,36 @@ def train_lightgbm(
 
 
 def main() -> None:
-    train_df, val_df, cat_cols, _ = prepare_experiment_without_feat_engineering()
+    (
+        train_df,
+        val_df,
+        cat_cols,
+    ) = experiment_without_feat_engineering()
 
-    X_train = train_df.drop("rating", axis=1)
-    y_train = train_df["rating"]
-    X_val = val_df.drop("rating", axis=1)
-    y_val = val_df["rating"]
+    encoder = LabelEncoder(columns_to_encode=cat_cols)
 
-    results_dir = (
-        Path(DATA_AND_ARTIFACTS_DIR) / "results/results_lgb_with_default_params"
-    )
+    train_df_encoded = encoder.fit_transform(train_df)
+    val_df_encoded = encoder.transform(val_df)
+
+    X_train = train_df_encoded.drop("rating", axis=1)
+    y_train = train_df_encoded["rating"]
+    X_val = val_df_encoded.drop("rating", axis=1)
+    y_val = val_df_encoded["rating"]
+
+    results_dir = Path(RESULTS_DIR) / "results_lgb_with_default_params"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    lgb_model, lgb_acc, lgb_f1 = train_lightgbm(
-        X_train, X_val, y_train, y_val, cat_cols
-    )
+    model, lgb_acc, lgb_f1 = train_lightgbm(X_train, X_val, y_train, y_val, cat_cols)
 
     with open(results_dir / "model.pkl", "wb") as f:
-        pickle.dump(lgb_model, f)
+        pickle.dump(model, f)
 
     metrics = {
-        "lightgbm": {"accuracy": lgb_acc, "f1": lgb_f1},
+        "lightgbm": {
+            "accuracy": lgb_acc,
+            "f1": lgb_f1,
+            "val_loss": model.best_score["valid"]["binary_logloss"],
+        }
     }
 
     with open(results_dir / "metrics.json", "w") as f:

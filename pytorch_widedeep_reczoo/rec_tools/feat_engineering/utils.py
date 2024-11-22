@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
+from rec_tools.constants import DATA_DIR
 
 
 def load_movielens_train_val(
     split_path: str, return_split: Literal["train", "val", "both"]
 ) -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    root_dir = Path(f"{DATA_AND_ARTIFACTS_DIR}/train_val_test_splits")
+    root_dir = Path(f"{DATA_DIR}/train_val_test_splits")
     full_path = root_dir / split_path
 
     if return_split == "train":
@@ -29,9 +29,7 @@ def load_movielens(full_path: str | None = None) -> pd.DataFrame:
     ml_path = (
         Path(full_path)
         if full_path
-        else Path(
-            f"{DATA_AND_ARTIFACTS_DIR}/raw_data/ml-1m/movielens_ratings_with_info.csv"
-        )
+        else Path(f"{DATA_DIR}/raw_data/ml-1m/movielens_ratings_with_info.csv")
     )
 
     ml_df = pd.read_csv(ml_path)
@@ -46,7 +44,7 @@ def load_movie_metadata(full_path: str | None = None) -> pd.DataFrame:
     ml_path = (
         Path(full_path)
         if full_path
-        else Path(f"{DATA_AND_ARTIFACTS_DIR}/raw_data/ml-1m/movies_metadata.csv.zip")
+        else Path(f"{DATA_DIR}/raw_data/ml-1m/movies_metadata.csv.zip")
     )
     return pd.read_csv(ml_path)
 

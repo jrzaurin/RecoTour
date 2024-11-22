@@ -11,12 +11,11 @@ import lightgbm as lgb
 from ray import tune, train
 from sklearn.metrics import f1_score, accuracy_score
 from ray.tune.schedulers import HyperBandScheduler
+from pytorch_widedeep.utils import LabelEncoder
 from ray.tune.search.hyperopt import HyperOptSearch
 
-from rec_tools.constants import DATA_AND_ARTIFACTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import (
-    prepare_experiment_with_feature_engineering,
-)
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
 
 warnings.filterwarnings("ignore")
 
@@ -75,8 +74,9 @@ def train_lgbm(
 
 
 def run_optimization(
+    use_umap: Literal["st", "ch"] = "ch",
     optimizer: Literal["tpe", "hyperband"] = "tpe",
-    num_trials: int = 200,
+    num_trials: int = 100,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
@@ -89,13 +89,17 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, _, encoder = prepare_experiment_with_feature_engineering(
-        use_umap="ch", gbm="lgbm"
-    )
-    y_train = train_df["rating"]
-    y_val = val_df["rating"]
-    X_train = train_df.drop("rating", axis=1)
-    X_val = val_df.drop("rating", axis=1)
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+
+    encoder = LabelEncoder(columns_to_encode=cat_cols)
+
+    train_df_encoded = encoder.fit_transform(train_df)
+    val_df_encoded = encoder.transform(val_df)
+
+    y_train = train_df_encoded["rating"]
+    y_val = val_df_encoded["rating"]
+    X_train = train_df_encoded.drop("rating", axis=1)
+    X_val = val_df_encoded.drop("rating", axis=1)
 
     # Define search space
     search_space = {
@@ -120,8 +124,9 @@ def run_optimization(
             scheduler = HyperBandScheduler(metric="val_loss", mode="min")
 
         results_dir = os.path.abspath(
-            "/".join([DATA_AND_ARTIFACTS_DIR, "results", "results_lgb_with_ray"])
+            "/".join([RESULTS_DIR, f"results_lgb_with_ray_{use_umap}"])
         )
+
         tuner = tune.Tuner(
             tune.with_parameters(
                 train_lgbm,
