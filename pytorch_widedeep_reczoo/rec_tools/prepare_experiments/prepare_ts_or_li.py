@@ -1,4 +1,4 @@
-from typing import List, Tuple, Literal
+from typing import List, Tuple, Literal, Optional
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +9,7 @@ from rec_tools.constants import (
     MOVIELENS_SPLITS_DIR,
     TRAIN_VAL_TEST_SPLITS_DIR,
     TEMPORAL_MOVIELENS_SPLIT_DIR,
+    LAST_INTERACTIONS_MOVIELENS_SPLIT_DIR,
 )
 
 
@@ -17,19 +18,9 @@ def binarize_target(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_and_merge_features(
-    split: Literal["train_val", "test"] = "train_val",
-    use_umap: Literal["st", "ch"] = "st",
-) -> pd.DataFrame | Tuple[pd.DataFrame, pd.DataFrame]:
-    """Load and merge features for train/val or test data.
-
-    Args:
-        split: Which split to load ("train", "val", or "test")
-        use_umap: Which UMAP features to use ("st" or "ch")
-
-    Returns:
-        Single DataFrame for test split, or tuple of (train_df, val_df) for train/val
-    """
+def _load_split_data(
+    split: str, split_type: str
+) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
     cols_to_keep = [
         "user_id",
         "item_id",
@@ -42,23 +33,63 @@ def load_and_merge_features(
 
     if split == "test":
         split_path = Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / MOVIELENS_SPLITS_DIR
-        df = pd.read_csv(split_path / "test.csv")[cols_to_keep]
-    else:
-        split_path = (
-            Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / TEMPORAL_MOVIELENS_SPLIT_DIR
-        )
-        df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
-        val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
+        return pd.read_csv(split_path / "test.csv")[cols_to_keep], None
 
-    # Load all feature files
+    split_dir = (
+        TEMPORAL_MOVIELENS_SPLIT_DIR
+        if split_type == "ts"
+        else LAST_INTERACTIONS_MOVIELENS_SPLIT_DIR
+    )
+    split_path = Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / split_dir
+    df = pd.read_csv(split_path / "train.csv")[cols_to_keep]
+    val_df = pd.read_csv(split_path / "val.csv")[cols_to_keep]
+    return df, val_df
+
+
+def _get_feature_paths(split_type: str, use_umap: str) -> Tuple[Path, Path, Path, Path]:
     movie_features_path = (
         Path(DATA_DIR) / FEATURE_STORE_DIR / "processed_movie_features_llm.csv"
     )
-    item_dynamic_features_path = Path(DATA_DIR) / FEATURE_STORE_DIR / "ts_train_idf.csv"
-    user_dynamic_features_path = Path(DATA_DIR) / FEATURE_STORE_DIR / "ts_train_udf.csv"
+
+    item_dynamic_features_path = (
+        Path(DATA_DIR)
+        / FEATURE_STORE_DIR
+        / ("ts_train_idf.csv" if split_type == "ts" else "li_train_idf.csv")
+    )
+    user_dynamic_features_path = (
+        Path(DATA_DIR)
+        / FEATURE_STORE_DIR
+        / ("ts_train_udf.csv" if split_type == "ts" else "li_train_udf.csv")
+    )
+
     umap_results_path = (
         Path(DATA_DIR) / FEATURE_STORE_DIR / f"umap_results_{use_umap}.csv"
     )
+
+    return (
+        movie_features_path,
+        item_dynamic_features_path,
+        user_dynamic_features_path,
+        umap_results_path,
+    )
+
+
+def load_and_merge_features(
+    split: Literal["train_val", "test"] = "train_val",
+    use_umap: Literal["st", "ch"] = "st",
+    split_type: Literal["ts", "li"] = "ts",
+) -> pd.DataFrame | Tuple[pd.DataFrame, pd.DataFrame]:
+    df, val_df = _load_split_data(
+        split,
+        split_type,
+    )
+
+    (
+        movie_features_path,
+        item_dynamic_features_path,
+        user_dynamic_features_path,
+        umap_results_path,
+    ) = _get_feature_paths(split_type, use_umap)
 
     # Load and prepare features
     movie_features = pd.read_csv(movie_features_path)
@@ -66,21 +97,21 @@ def load_and_merge_features(
     movie_features["runtime"] = movie_features["runtime"].replace(
         0, movie_features["runtime"].median()
     )
-    ts_train_idf = pd.read_csv(item_dynamic_features_path)
-    ts_train_udf = pd.read_csv(user_dynamic_features_path)
+    train_idf = pd.read_csv(item_dynamic_features_path)
+    train_udf = pd.read_csv(user_dynamic_features_path)
     umap_results = pd.read_csv(umap_results_path)
 
     # Merge all features
     df = df.merge(movie_features, on="item_id", how="left")
-    df = df.merge(ts_train_idf, on="item_id", how="left")
-    df = df.merge(ts_train_udf, on="user_id", how="left", suffixes=("_item", "_user"))
+    df = df.merge(train_idf, on="item_id", how="left")
+    df = df.merge(train_udf, on="user_id", how="left", suffixes=("_item", "_user"))
     df = df.merge(umap_results, on="item_id", how="left")
 
-    if split == "train_val":
+    if val_df is not None:
         val_df = val_df.merge(movie_features, on="item_id", how="left")
-        val_df = val_df.merge(ts_train_idf, on="item_id", how="left")
+        val_df = val_df.merge(train_idf, on="item_id", how="left")
         val_df = val_df.merge(
-            ts_train_udf, on="user_id", how="left", suffixes=("_item", "_user")
+            train_udf, on="user_id", how="left", suffixes=("_item", "_user")
         )
         val_df = val_df.merge(umap_results, on="item_id", how="left")
         return df, val_df
@@ -128,13 +159,15 @@ def impute_categorical_cols(
     return df
 
 
-def experiment_without_feat_engineering() -> (
-    Tuple[pd.DataFrame, pd.DataFrame, List[str]]
-):
-
-    split_path = (
-        Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / TEMPORAL_MOVIELENS_SPLIT_DIR
+def experiment_without_feat_engineering(
+    split_type: Literal["ts", "li"] = "ts"
+) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
+    split_dir = (
+        TEMPORAL_MOVIELENS_SPLIT_DIR
+        if split_type == "ts"
+        else LAST_INTERACTIONS_MOVIELENS_SPLIT_DIR
     )
+    split_path = Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / split_dir
     train_df = pd.read_csv(split_path / "train.csv")
     val_df = pd.read_csv(split_path / "val.csv")
 
@@ -159,8 +192,11 @@ def experiment_without_feat_engineering() -> (
 
 def experiment_with_feature_engineering(
     use_umap: Literal["st", "ch"] = "st",
+    split_type: Literal["ts", "li"] = "ts",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-    train_df, val_df = load_and_merge_features(split="train_val", use_umap=use_umap)
+    train_df, val_df = load_and_merge_features(
+        split="train_val", use_umap=use_umap, split_type=split_type
+    )
 
     train_df = binarize_target(train_df)
     val_df = binarize_target(val_df)
@@ -173,10 +209,15 @@ def experiment_with_feature_engineering(
     return train_df, val_df, cat_cols
 
 
-def experiment_for_catboost_with_text() -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-    split_path = (
-        Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / TEMPORAL_MOVIELENS_SPLIT_DIR
+def experiment_for_catboost_with_text(
+    split_type: Literal["ts", "li"] = "ts"
+) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
+    split_dir = (
+        TEMPORAL_MOVIELENS_SPLIT_DIR
+        if split_type == "ts"
+        else LAST_INTERACTIONS_MOVIELENS_SPLIT_DIR
     )
+    split_path = Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / split_dir
     train_df = pd.read_csv(split_path / "train.csv")
     val_df = pd.read_csv(split_path / "val.csv")
 
