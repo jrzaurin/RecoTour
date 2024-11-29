@@ -14,7 +14,9 @@ from ray.tune.schedulers import HyperBandScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -78,6 +80,7 @@ def train_catboost(
 
 
 def run_optimization(
+    split_type: Literal["ts", "li"],
     use_umap: Literal["st", "ch"],
     optimizer: Literal["tpe", "hyperband"],
     num_trials: int = 100,
@@ -93,7 +96,9 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -120,7 +125,7 @@ def run_optimization(
 
         # Update results directory path
         results_dir = os.path.abspath(
-            "/".join([RESULTS_DIR, f"results_ctb_with_ray_{use_umap}"])
+            "/".join([RESULTS_DIR, f"results_ctb_with_ray_{use_umap}_{split_type}"])
         )
 
         tuner = tune.Tuner(
@@ -144,7 +149,7 @@ def run_optimization(
             run_config=train.RunConfig(
                 storage_path=results_dir,
                 name=f"results_ctb_ray_{optimizer}",
-                verbose=0,
+                verbose=1,
             ),
         )
 
@@ -179,5 +184,7 @@ def run_optimization(
 
 
 if __name__ == "__main__":
-    run_optimization(optimizer="tpe", use_umap="ch")
-    run_optimization(optimizer="hyperband", use_umap="ch")
+    # run_optimization(optimizer="tpe", use_umap="ch", split_type="ts")
+    run_optimization(optimizer="tpe", use_umap="ch", split_type="li")
+    # run_optimization(optimizer="hyperband", use_umap="ch", split_type="ts")
+    # run_optimization(optimizer="hyperband", use_umap="ch", split_type="li")

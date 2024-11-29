@@ -15,7 +15,9 @@ from pytorch_widedeep.utils import LabelEncoder
 from ray.tune.search.hyperopt import HyperOptSearch
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -74,9 +76,10 @@ def train_lgbm(
 
 
 def run_optimization(
+    split_type: Literal["ts", "li"] = "ts",
     use_umap: Literal["st", "ch"] = "ch",
     optimizer: Literal["tpe", "hyperband"] = "tpe",
-    num_trials: int = 100,
+    num_trials: int = 200,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
@@ -89,7 +92,9 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -124,7 +129,7 @@ def run_optimization(
             scheduler = HyperBandScheduler(metric="val_loss", mode="min")
 
         results_dir = os.path.abspath(
-            "/".join([RESULTS_DIR, f"results_lgb_with_ray_{use_umap}"])
+            "/".join([RESULTS_DIR, f"results_lgb_with_ray_{use_umap}_{split_type}"])
         )
 
         tuner = tune.Tuner(
@@ -183,5 +188,7 @@ def run_optimization(
 
 if __name__ == "__main__":
 
-    run_optimization(optimizer="tpe")
-    run_optimization(optimizer="hyperband")
+    # run_optimization(optimizer="tpe", split_type="ts")
+    # run_optimization(optimizer="tpe", split_type="li")
+    run_optimization(optimizer="hyperband", split_type="ts")
+    run_optimization(optimizer="hyperband", split_type="li")

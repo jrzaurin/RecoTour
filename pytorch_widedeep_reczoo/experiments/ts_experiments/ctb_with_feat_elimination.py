@@ -8,13 +8,18 @@ from catboost import Pool
 from sklearn.metrics import f1_score, accuracy_score
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
 
 
 def create_initial_datasets(
-    use_umap: Literal["st", "ch"]
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
 ) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -28,10 +33,11 @@ def create_initial_datasets(
 
 
 def run_catboost_feature_elimination(
-    use_umap: Literal["st", "ch"]
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
 ) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets(use_umap)
+        create_initial_datasets(use_umap, split_type)
     )
 
     results = {}
@@ -54,11 +60,12 @@ def run_catboost_feature_elimination(
         model = ctb.train(
             pool=train_data,
             params={
+                "num_boost_round": 500,
                 "loss_function": "Logloss",
                 "eval_metric": "Logloss",
                 "early_stopping_rounds": 50,
                 "allow_writing_files": False,
-                "verbose": False,
+                "verbose": True,
             },
             eval_set=val_data,
         )
@@ -80,7 +87,6 @@ def run_catboost_feature_elimination(
         feature_importance = pd.DataFrame(
             {"feature": current_features, "importance": importance}
         )
-
         # Only consider non-protected features for elimination
         non_protected_importance = feature_importance[
             ~feature_importance["feature"].isin(protected_features)
@@ -176,7 +182,9 @@ def run_catboost_feature_elimination(
         )
         print("-" * 100)
 
-    results_dir = Path(RESULTS_DIR) / "results_ctb_feature_elimination"
+    results_dir = (
+        Path(RESULTS_DIR) / f"results_ctb_feature_elimination_{use_umap}_{split_type}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
     with open(results_dir / "results.pkl", "wb") as f:
         pickle.dump(results, f)
@@ -185,4 +193,5 @@ def run_catboost_feature_elimination(
 
 
 if __name__ == "__main__":
-    results = run_catboost_feature_elimination(use_umap="ch")
+    # results_ts = run_catboost_feature_elimination(use_umap="ch", split_type="ts")
+    results_li = run_catboost_feature_elimination(use_umap="ch", split_type="li")

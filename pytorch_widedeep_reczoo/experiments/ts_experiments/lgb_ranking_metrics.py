@@ -14,7 +14,7 @@ from rec_tools.constants import (
     TRAIN_VAL_TEST_SPLITS_DIR,
 )
 from rec_tools.ranking_metrics import map_at_k, hit_ratio_at_k, binary_ndcg_at_k
-from rec_tools.prepare_experiments.prepare_ts import (
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
     binarize_target,
     impute_categorical_cols,
     experiment_without_feat_engineering,

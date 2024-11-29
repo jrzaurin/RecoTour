@@ -1,6 +1,6 @@
 import json
 import pickle
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +10,9 @@ from sklearn.metrics import f1_score, accuracy_score
 from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_without_feat_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_without_feat_engineering,
+)
 
 
 def train_lightgbm(
@@ -48,12 +50,12 @@ def train_lightgbm(
     return model, acc, f1
 
 
-def main() -> None:
+def main(split_type: Literal["ts", "li"] = "ts") -> None:
     (
         train_df,
         val_df,
         cat_cols,
-    ) = experiment_without_feat_engineering()
+    ) = experiment_without_feat_engineering(split_type)
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -65,7 +67,7 @@ def main() -> None:
     X_val = val_df_encoded.drop("rating", axis=1)
     y_val = val_df_encoded["rating"]
 
-    results_dir = Path(RESULTS_DIR) / "results_lgb_with_default_params"
+    results_dir = Path(RESULTS_DIR) / f"results_lgb_with_default_params_{split_type}"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     model, lgb_acc, lgb_f1 = train_lightgbm(X_train, X_val, y_train, y_val, cat_cols)
@@ -86,4 +88,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(split_type="ts")
+    main(split_type="li")

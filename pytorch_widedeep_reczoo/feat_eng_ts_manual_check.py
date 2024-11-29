@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from rec_tools.constants import DATA_DIR, FEATURE_STORE_DIR
-from rec_tools.prepare_experiments.prepare_ts import load_and_merge_features
+from rec_tools.prepare_experiments.prepare_ts_or_li import load_and_merge_features
 
 feature_store_path = Path(DATA_DIR) / FEATURE_STORE_DIR
 splits_path = Path(DATA_DIR) / "train_val_test_splits"

@@ -1,6 +1,6 @@
 import json
 import pickle
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 from pathlib import Path
 
 import pandas as pd
@@ -10,7 +10,9 @@ import catboost as ctb
 from sklearn.metrics import f1_score, accuracy_score
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_for_catboost_with_text
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_for_catboost_with_text,
+)
 
 
 def train_catboost_with_text(
@@ -53,15 +55,17 @@ def train_catboost_with_text(
     return model, acc, f1
 
 
-def main():
-    train_df, val_df, cat_cols = experiment_for_catboost_with_text()
+def main(split_type: Literal["ts", "li"] = "ts") -> None:
+    train_df, val_df, cat_cols = experiment_for_catboost_with_text(split_type)
 
     X_train = train_df.drop("rating", axis=1)
     y_train = train_df["rating"]
     X_val = val_df.drop("rating", axis=1)
     y_val = val_df["rating"]
 
-    results_dir = Path(RESULTS_DIR) / "results_ctb_with_text_and_default_params"
+    results_dir = (
+        Path(RESULTS_DIR) / f"results_ctb_with_text_and_default_params_{split_type}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
 
     ctb_model, ctb_acc, ctb_f1 = train_catboost_with_text(
@@ -84,4 +88,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(split_type="ts")
+    main(split_type="li")

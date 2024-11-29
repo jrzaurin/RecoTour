@@ -3,9 +3,8 @@ import warnings
 from typing import Any, Dict, Literal
 from pathlib import Path
 
-import lightgbm as lgb
+import catboost as ctb
 from hyperopt import Trials, hp, tpe, fmin, space_eval
-from lightgbm import Dataset as lgbDataset
 from sklearn.metrics import f1_score, accuracy_score
 from pytorch_widedeep.utils import LabelEncoder
 
@@ -17,7 +16,7 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
 warnings.filterwarnings("ignore")
 
 
-class LGBOptimizerHyperopt(object):
+class CTBOptimizerHyperopt(object):
     def __init__(
         self,
         verbose: bool = False,
@@ -29,12 +28,17 @@ class LGBOptimizerHyperopt(object):
 
     def optimize(
         self,
-        dtrain: lgbDataset,
-        deval: lgbDataset,
-        maxevals: int = 200,
+        dtrain: ctb.Pool,
+        deval: ctb.Pool,
+        maxevals: int = 100,
     ):
-
-        self.best = lgb.LGBMClassifier().get_params()
+        # Initialize with default params
+        self.best = {
+            "iterations": 500,
+            "early_stopping_rounds": 50,
+            "verbose": False,
+            "loss_function": "Logloss",
+        }
 
         param_space = self.hyperparameter_space()
         objective = self.get_objective(dtrain, deval)
@@ -49,45 +53,35 @@ class LGBOptimizerHyperopt(object):
         )
         self.trials = trials
         best = space_eval(param_space, trials.argmin)
-        best["num_leaves"] = int(best["num_leaves"])
-        best["min_child_samples"] = int(best["min_child_samples"])
-        best["verbose"] = -1
-        best["objective"] = "binary"
-
-        # just a big number, since it will run with early stopping
-        best["n_estimators"] = 1000
+        best["depth"] = int(best["depth"])
+        best["min_data_in_leaf"] = int(best["min_data_in_leaf"])
 
         self.best.update(best)
 
-    def get_objective(self, dtrain: lgbDataset, deval: lgbDataset):
+    def get_objective(self, dtrain: ctb.Pool, deval: ctb.Pool):
         def objective(params: Dict[str, Any]) -> float:
+            params["iterations"] = 500
+            params["early_stopping_rounds"] = 50
+            params["verbose"] = 1
+            params["loss_function"] = "Logloss"
+            params["depth"] = int(params["depth"])
+            params["min_data_in_leaf"] = int(params["min_data_in_leaf"])
 
-            # hyperopt casts as float
-            params["n_estimators"] = 1000
-            params["verbose"] = -1
-            params["seed"] = 1
-            params["feature_pre_filter"] = False
-            params["objective"] = "binary"
-
-            params["num_leaves"] = int(params["num_leaves"])
-            params["min_child_samples"] = int(params["min_child_samples"])
-
-            model = lgb.train(
-                params,
-                dtrain,
-                valid_sets=[deval],
-                callbacks=[lgb.early_stopping(50)],
+            model = ctb.train(
+                pool=dtrain,
+                params=params,
+                eval_set=deval,
             )
 
-            preds = model.predict(deval.data)
+            preds = model.predict(deval, prediction_type="Probability")[:, 1]
             if self.score == "accuracy":
-                preds_labels = (preds > 0.5).astype(int)  # type: ignore
-                score = -accuracy_score(deval.label, preds_labels)
+                preds_labels = (preds > 0.5).astype(int)
+                score = -accuracy_score(deval.get_label(), preds_labels)
             elif self.score == "f1":
-                preds_labels = (preds > 0.5).astype(int)  # type: ignore
-                score = -f1_score(deval.label, preds_labels)
+                preds_labels = (preds > 0.5).astype(int)
+                score = -f1_score(deval.get_label(), preds_labels)
             else:
-                score = model.best_score["valid_0"]["binary_logloss"]
+                score = model.get_best_score()["validation"]["Logloss"]
 
             return score
 
@@ -98,15 +92,9 @@ class LGBOptimizerHyperopt(object):
     ) -> Dict[str, Any]:
         space = {
             "learning_rate": hp.uniform("learning_rate", 0.01, 0.3),
-            "num_leaves": hp.quniform("num_leaves", 20, 200, 10),
-            "min_child_samples": hp.quniform("min_child_samples", 20, 100, 20),
-            "colsample_bytree": hp.uniform("colsample_bytree", 0.5, 1.0),
-            "reg_alpha": hp.choice(
-                "reg_alpha", [0.01, 0.05, 0.1, 0.2, 0.4, 1.0, 2.0, 4.0, 10.0]
-            ),
-            "reg_lambda": hp.choice(
-                "reg_lambda", [0.01, 0.05, 0.1, 0.2, 0.4, 1.0, 2.0, 4.0, 10.0]
-            ),
+            "depth": hp.quniform("depth", 4, 10, 1),
+            "min_data_in_leaf": hp.quniform("min_data_in_leaf", 5, 50, 5),
+            "l2_leaf_reg": hp.loguniform("l2_leaf_reg", -10, 0),  # exp(-10) to exp(0)
         }
         if param_space:
             return param_space
@@ -132,34 +120,31 @@ def run_ts_lgb_with_hyperopt(
     X_val = val_df_encoded.drop("rating", axis=1)
 
     results_dir = (
-        Path(RESULTS_DIR) / f"results_lgb_with_hyperopt_{use_umap}_{split_type}"
+        Path(RESULTS_DIR) / f"results_ctb_with_hyperopt_{use_umap}_{split_type}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    lgbtrain = lgbDataset(
+    train_pool = ctb.Pool(
         X_train,
-        y_train,
-        categorical_feature=encoder.columns_to_encode,
-        free_raw_data=False,
+        label=y_train,
+        cat_features=encoder.columns_to_encode,
     )
-    lgbvalid = lgbDataset(
+    valid_pool = ctb.Pool(
         X_val,
-        y_val,
-        reference=lgbtrain,
-        free_raw_data=False,
+        label=y_val,
+        cat_features=encoder.columns_to_encode,
     )
 
-    tuner = LGBOptimizerHyperopt(verbose=True)
-    tuner.optimize(lgbtrain, lgbvalid)
+    tuner = CTBOptimizerHyperopt(verbose=True)
+    tuner.optimize(train_pool, valid_pool)
 
-    model = lgb.train(
-        tuner.best,
-        lgbtrain,
-        valid_sets=[lgbvalid],
-        callbacks=[lgb.early_stopping(50, verbose=True)],
+    model = ctb.train(
+        pool=train_pool,
+        params=tuner.best,
+        eval_set=valid_pool,
     )
 
-    y_pred = model.predict(X_val)
+    y_pred = model.predict(X_val, prediction_type="Probability")[:, 1]
     y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
 
     accuracy = accuracy_score(y_val, y_pred_labels)
@@ -169,7 +154,7 @@ def run_ts_lgb_with_hyperopt(
         "best_params": tuner.best,
         "accuracy": accuracy,
         "f1": f1,
-        "val_loss": model.best_score["valid_0"]["binary_logloss"],
+        "val_loss": model.get_best_score()["validation"]["Logloss"],
     }
 
     with open(results_dir / "best_trial.json", "w") as f:
@@ -180,5 +165,5 @@ def run_ts_lgb_with_hyperopt(
 
 
 if __name__ == "__main__":
-    run_ts_lgb_with_hyperopt(use_umap="ch", split_type="ts")
+    # run_ts_lgb_with_hyperopt(use_umap="ch", split_type="ts")
     run_ts_lgb_with_hyperopt(use_umap="ch", split_type="li")

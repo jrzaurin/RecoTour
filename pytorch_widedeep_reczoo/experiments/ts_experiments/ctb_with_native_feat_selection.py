@@ -1,0 +1,141 @@
+import pickle
+from typing import Any, Dict, List, Tuple, Literal
+from pathlib import Path
+
+import pandas as pd
+from catboost import Pool, CatBoostClassifier
+from sklearn.metrics import f1_score, accuracy_score
+
+from rec_tools.constants import RESULTS_DIR
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
+
+
+def create_initial_datasets(
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
+) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
+
+    y_train = train_df["rating"]
+    y_val = val_df["rating"]
+    X_train = train_df.drop("rating", axis=1)
+    X_val = val_df.drop("rating", axis=1)
+
+    train_data = Pool(X_train, label=y_train, cat_features=cat_cols)
+    val_data = Pool(X_val, label=y_val, cat_features=cat_cols)
+
+    return train_data, val_data, X_train, X_val, y_train, y_val, cat_cols
+
+
+def run_catboost_native_feature_selection(
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
+    select_features_algorithm: Literal[
+        "RecursiveByPredictionValuesChange",
+        "RecursiveByLossChange",
+        "RecursiveByShapValues",
+    ] = "RecursiveByLossChange",
+) -> Dict[str, Any]:
+    train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
+        create_initial_datasets(use_umap, split_type)
+    )
+
+    select_features_algorithm_suffix_map = {
+        "RecursiveByPredictionValuesChange": "pvc",
+        "RecursiveByLossChange": "lfc",
+        "RecursiveByShapValues": "shap",
+    }
+
+    model = CatBoostClassifier(
+        loss_function="Logloss",
+        eval_metric="Logloss",
+        early_stopping_rounds=50,
+        verbose=True,
+        allow_writing_files=False,
+    )
+
+    summary = model.select_features(
+        train_data,
+        eval_set=val_data,
+        num_features_to_select=10,
+        algorithm=select_features_algorithm,
+        logging_level="Silent",
+    )
+
+    selected_features = summary["selected_features_names"]
+
+    model.fit(
+        X_train[selected_features],
+        y_train,
+        cat_features=[c for c in cat_cols if c in selected_features],
+        eval_set=(X_val[selected_features], y_val),
+        verbose=True,
+    )
+
+    y_pred = model.predict_proba(X_val[selected_features])[:, 1]
+    y_pred_labels = (y_pred > 0.5).astype(int)
+
+    results = {
+        "features": selected_features,
+        "acc": accuracy_score(y_val, y_pred_labels),
+        "f1": f1_score(y_val, y_pred_labels),
+        "val_loss": model.get_best_score()["validation"]["Logloss"],
+    }
+
+    print("-" * 100)
+    print(
+        f"Final metrics: accuracy: {results['acc']}, "
+        f"f1: {results['f1']}, val_loss: {results['val_loss']}"
+    )
+    print(f"Selected features: {selected_features}")
+    print("-" * 100)
+
+    sf_suffix = select_features_algorithm_suffix_map[select_features_algorithm]
+    results_dir = (
+        Path(RESULTS_DIR)
+        / f"results_ctb_native_feature_selection_{use_umap}_{split_type}_{sf_suffix}"
+    )
+    results_dir.mkdir(parents=True, exist_ok=True)
+    with open(results_dir / "results.pkl", "wb") as f:
+        pickle.dump(results, f)
+
+    return results
+
+
+if __name__ == "__main__":
+    results_ts = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="ts",
+        select_features_algorithm="RecursiveByLossChange",
+    )
+    results_li = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="li",
+        select_features_algorithm="RecursiveByLossChange",
+    )
+
+    results_ts_shap = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="ts",
+        select_features_algorithm="RecursiveByShapValues",
+    )
+    results_li_shap = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="li",
+        select_features_algorithm="RecursiveByShapValues",
+    )
+
+    results_ts_pvc = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="ts",
+        select_features_algorithm="RecursiveByPredictionValuesChange",
+    )
+    results_li_pvc = run_catboost_native_feature_selection(
+        use_umap="ch",
+        split_type="li",
+        select_features_algorithm="RecursiveByPredictionValuesChange",
+    )

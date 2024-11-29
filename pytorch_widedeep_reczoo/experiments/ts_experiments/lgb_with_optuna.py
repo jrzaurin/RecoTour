@@ -10,7 +10,9 @@ from optuna.integration import lightgbm
 from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -52,8 +54,12 @@ class LGBOptunaOptimizer(object):
         self.best["n_estimators"] = 1000  # type: ignore
 
 
-def run_ts_lightgbm_optuna(use_umap: Literal["st", "ch"]) -> None:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+def run_ts_lightgbm_optuna(
+    use_umap: Literal["st", "ch"], split_type: Literal["ts", "li"] = "ts"
+) -> None:
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -65,7 +71,7 @@ def run_ts_lightgbm_optuna(use_umap: Literal["st", "ch"]) -> None:
     X_train = train_df_encoded.drop("rating", axis=1)
     X_val = val_df_encoded.drop("rating", axis=1)
 
-    results_dir = Path(RESULTS_DIR) / f"results_lgb_with_optuna_{use_umap}"
+    results_dir = Path(RESULTS_DIR) / f"results_lgb_with_optuna_{use_umap}_{split_type}"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     lgbtrain = lgbDataset(
@@ -113,5 +119,5 @@ def run_ts_lightgbm_optuna(use_umap: Literal["st", "ch"]) -> None:
 
 
 if __name__ == "__main__":
-
-    run_ts_lightgbm_optuna(use_umap="ch")
+    run_ts_lightgbm_optuna(use_umap="ch", split_type="ts")
+    run_ts_lightgbm_optuna(use_umap="ch", split_type="li")

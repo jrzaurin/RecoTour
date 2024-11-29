@@ -9,10 +9,15 @@ from sklearn.metrics import f1_score, accuracy_score
 from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
-from rec_tools.prepare_experiments.prepare_ts import experiment_with_feature_engineering
+from rec_tools.prepare_experiments.prepare_ts_or_li import (
+    experiment_with_feature_engineering,
+)
 
 
-def create_initial_datasets(use_umap: Literal["st", "ch"]) -> Tuple[
+def create_initial_datasets(
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
+) -> Tuple[
     lgb.Dataset,
     lgb.Dataset,
     pd.DataFrame,
@@ -21,7 +26,9 @@ def create_initial_datasets(use_umap: Literal["st", "ch"]) -> Tuple[
     pd.Series,
     List[str],
 ]:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(use_umap)
+    train_df, val_df, cat_cols = experiment_with_feature_engineering(
+        use_umap, split_type
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -48,10 +55,11 @@ def create_initial_datasets(use_umap: Literal["st", "ch"]) -> Tuple[
 
 
 def run_lgb_feature_elimination(
-    use_umap: Literal["st", "ch"]
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"],
 ) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets(use_umap)
+        create_initial_datasets(use_umap, split_type)
     )
 
     results = {}
@@ -127,7 +135,9 @@ def run_lgb_feature_elimination(
         )
         print("-" * 100)
 
-    results_dir = Path(RESULTS_DIR) / f"results_lgb_feature_elimination_{use_umap}"
+    results_dir = (
+        Path(RESULTS_DIR) / f"results_lgb_feature_elimination_{use_umap}_{split_type}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
 
     save_fname = results_dir / "results.pkl"
@@ -138,4 +148,5 @@ def run_lgb_feature_elimination(
 
 
 if __name__ == "__main__":
-    results = run_lgb_feature_elimination(use_umap="ch")
+    results_ts = run_lgb_feature_elimination(use_umap="ch", split_type="ts")
+    results_li = run_lgb_feature_elimination(use_umap="ch", split_type="li")
