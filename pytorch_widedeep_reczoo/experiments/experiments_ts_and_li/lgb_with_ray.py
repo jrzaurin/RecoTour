@@ -16,7 +16,7 @@ from ray.tune.search.hyperopt import HyperOptSearch
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
-    experiment_with_feature_engineering,
+    experiment_with_feat_engineering,
 )
 
 warnings.filterwarnings("ignore")
@@ -92,9 +92,7 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(
-        use_umap, split_type
-    )
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -173,9 +171,7 @@ def run_optimization(
         }
 
         with open(
-            Path(results_dir)
-            / f"results_lgbm_ray_{optimizer}"
-            / "best_experiment_info.json",
+            Path(results_dir) / f"results_lgbm_ray_{optimizer}" / "results.json",
             "w",
         ) as f:
             json.dump(best_experiment_info, f, indent=4)

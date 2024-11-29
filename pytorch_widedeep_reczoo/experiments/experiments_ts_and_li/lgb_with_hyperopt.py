@@ -11,7 +11,7 @@ from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
-    experiment_with_feature_engineering,
+    experiment_with_feat_engineering,
 )
 
 warnings.filterwarnings("ignore")
@@ -117,9 +117,7 @@ class LGBOptimizerHyperopt(object):
 def run_ts_lgb_with_hyperopt(
     use_umap: Literal["st", "ch"], split_type: Literal["ts", "li"] = "ts"
 ) -> None:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(
-        use_umap, split_type
-    )
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -172,7 +170,7 @@ def run_ts_lgb_with_hyperopt(
         "val_loss": model.best_score["valid_0"]["binary_logloss"],
     }
 
-    with open(results_dir / "best_trial.json", "w") as f:
+    with open(results_dir / "results.json", "w") as f:
         json.dump(best_trial, f, indent=4)
 
     print("Accuracy: ", accuracy)

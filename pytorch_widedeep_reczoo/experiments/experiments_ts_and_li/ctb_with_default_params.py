@@ -63,14 +63,12 @@ def main(split_type: Literal["ts", "li"] = "ts") -> None:
         pickle.dump(ctb_model, f)
 
     metrics = {
-        "catboost": {
-            "accuracy": ctb_acc,
-            "f1": ctb_f1,
-            "val_loss": ctb_model.get_best_score()["validation"]["Logloss"],
-        },
+        "accuracy": ctb_acc,
+        "f1": ctb_f1,
+        "val_loss": ctb_model.get_best_score()["validation"]["Logloss"],
     }
 
-    with open(results_dir / "metrics.json", "w") as f:
+    with open(results_dir / "results.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
 

@@ -9,7 +9,7 @@ from sklearn.metrics import f1_score, accuracy_score
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
-    experiment_with_feature_engineering,
+    experiment_with_feat_engineering,
 )
 
 
@@ -17,9 +17,7 @@ def create_initial_datasets(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
 ) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(
-        use_umap, split_type
-    )
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -144,7 +142,7 @@ def run_catboost_feature_elimination(
 
         results[trial] = {
             "features": current_features.copy(),
-            "acc": accuracy,
+            "accuracy": accuracy,
             "f1": f1,
             "val_loss": val_loss,
             "best_iteration": model.get_best_iteration(),
@@ -183,7 +181,8 @@ def run_catboost_feature_elimination(
         print("-" * 100)
 
     results_dir = (
-        Path(RESULTS_DIR) / f"results_ctb_feature_elimination_{use_umap}_{split_type}"
+        Path(RESULTS_DIR)
+        / f"results_ctb_with_feature_elimination_{use_umap}_{split_type}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
     with open(results_dir / "results.pkl", "wb") as f:

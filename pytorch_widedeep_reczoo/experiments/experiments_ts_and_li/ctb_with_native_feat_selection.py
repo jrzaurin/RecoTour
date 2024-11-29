@@ -8,7 +8,7 @@ from sklearn.metrics import f1_score, accuracy_score
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
-    experiment_with_feature_engineering,
+    experiment_with_feat_engineering,
 )
 
 
@@ -16,9 +16,7 @@ def create_initial_datasets(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
 ) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(
-        use_umap, split_type
-    )
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -36,9 +34,9 @@ def run_catboost_native_feature_selection(
     split_type: Literal["ts", "li"],
     select_features_algorithm: Literal[
         "RecursiveByPredictionValuesChange",
-        "RecursiveByLossChange",
+        "RecursiveByLossFunctionChange",
         "RecursiveByShapValues",
-    ] = "RecursiveByLossChange",
+    ] = "RecursiveByLossFunctionChange",
 ) -> Dict[str, Any]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
         create_initial_datasets(use_umap, split_type)
@@ -46,11 +44,12 @@ def run_catboost_native_feature_selection(
 
     select_features_algorithm_suffix_map = {
         "RecursiveByPredictionValuesChange": "pvc",
-        "RecursiveByLossChange": "lfc",
+        "RecursiveByLossFunctionChange": "lfc",
         "RecursiveByShapValues": "shap",
     }
 
     model = CatBoostClassifier(
+        num_boost_round=500,
         loss_function="Logloss",
         eval_metric="Logloss",
         early_stopping_rounds=50,
@@ -62,6 +61,7 @@ def run_catboost_native_feature_selection(
         train_data,
         eval_set=val_data,
         num_features_to_select=10,
+        features_for_select=train_data.get_feature_names(),
         algorithm=select_features_algorithm,
         logging_level="Silent",
     )
@@ -81,14 +81,15 @@ def run_catboost_native_feature_selection(
 
     results = {
         "features": selected_features,
-        "acc": accuracy_score(y_val, y_pred_labels),
+        "accuracy": accuracy_score(y_val, y_pred_labels),
         "f1": f1_score(y_val, y_pred_labels),
         "val_loss": model.get_best_score()["validation"]["Logloss"],
+        "best_iteration": model.get_best_iteration(),
     }
 
     print("-" * 100)
     print(
-        f"Final metrics: accuracy: {results['acc']}, "
+        f"Final metrics: accuracy: {results['accuracy']}, "
         f"f1: {results['f1']}, val_loss: {results['val_loss']}"
     )
     print(f"Selected features: {selected_features}")
@@ -97,7 +98,7 @@ def run_catboost_native_feature_selection(
     sf_suffix = select_features_algorithm_suffix_map[select_features_algorithm]
     results_dir = (
         Path(RESULTS_DIR)
-        / f"results_ctb_native_feature_selection_{use_umap}_{split_type}_{sf_suffix}"
+        / f"results_ctb_with_native_feature_selection_{use_umap}_{split_type}_{sf_suffix}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
     with open(results_dir / "results.pkl", "wb") as f:
@@ -110,12 +111,12 @@ if __name__ == "__main__":
     results_ts = run_catboost_native_feature_selection(
         use_umap="ch",
         split_type="ts",
-        select_features_algorithm="RecursiveByLossChange",
+        select_features_algorithm="RecursiveByLossFunctionChange",
     )
     results_li = run_catboost_native_feature_selection(
         use_umap="ch",
         split_type="li",
-        select_features_algorithm="RecursiveByLossChange",
+        select_features_algorithm="RecursiveByLossFunctionChange",
     )
 
     results_ts_shap = run_catboost_native_feature_selection(

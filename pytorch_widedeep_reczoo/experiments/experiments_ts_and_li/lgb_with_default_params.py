@@ -76,14 +76,12 @@ def main(split_type: Literal["ts", "li"] = "ts") -> None:
         pickle.dump(model, f)
 
     metrics = {
-        "lightgbm": {
-            "accuracy": lgb_acc,
-            "f1": lgb_f1,
-            "val_loss": model.best_score["valid"]["binary_logloss"],
-        }
+        "accuracy": lgb_acc,
+        "f1": lgb_f1,
+        "val_loss": model.best_score["valid"]["binary_logloss"],
     }
 
-    with open(results_dir / "metrics.json", "w") as f:
+    with open(results_dir / "results.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
 

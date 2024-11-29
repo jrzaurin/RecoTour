@@ -190,7 +190,7 @@ def experiment_without_feat_engineering(
     return train_df, val_df, cat_cols
 
 
-def experiment_with_feature_engineering(
+def experiment_with_feat_engineering(
     use_umap: Literal["st", "ch"] = "st",
     split_type: Literal["ts", "li"] = "ts",
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:

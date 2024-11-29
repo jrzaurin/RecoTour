@@ -1,5 +1,5 @@
 import pickle
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Literal
 from pathlib import Path
 
 import numpy as np
@@ -16,26 +16,66 @@ from rec_tools.constants import (
 from rec_tools.ranking_metrics import map_at_k, hit_ratio_at_k, binary_ndcg_at_k
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
     binarize_target,
+    find_categorical_cols,
     impute_categorical_cols,
+    load_and_merge_features,
     experiment_without_feat_engineering,
 )
 
 
-def set_lgb_datasets() -> Tuple[lgb.Dataset, lgb.Dataset]:
-    train_df, val_df, cat_cols = experiment_without_feat_engineering()
-    full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+def load_best_results_features_and_iteration(
+    split_type: Literal["ts", "li"]
+) -> Tuple[List[str], int]:
+    res_dir = Path(RESULTS_DIR) / f"results_lgb_feature_elimination_ch_{split_type}"
+    with open(res_dir / "results.pkl", "rb") as f:
+        results = pickle.load(f)
 
-    test_df = pd.read_csv(
-        Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / MOVIELENS_SPLITS_DIR / "test.csv"
-    )
-    test_df = binarize_target(test_df)
-    test_df = impute_categorical_cols(test_df, cat_cols)
+    best_trial = max(results, key=lambda x: -results[x]["val_loss"])
+    best_trial_features = results[best_trial]["features"]
+    best_iteration = results[best_trial]["best_iteration"]
 
-    full_train_df = full_train_df[cat_cols + ["rating"]]
-    test_df = test_df[cat_cols + ["rating"]]
+    return best_trial_features, best_iteration
+
+
+def set_lgb_datasets(
+    split_type: Literal["ts", "li"], with_feat_engineering: bool = False
+) -> Tuple[lgb.Dataset, lgb.Dataset]:
+    if with_feat_engineering:
+        train_df, val_df = load_and_merge_features(
+            split="train_val", use_umap="ch", split_type=split_type
+        )
+        test_df = load_and_merge_features(
+            split="test", use_umap="ch", split_type=split_type
+        )
+        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+
+        _cat_cols = find_categorical_cols(full_train_df)
+        full_train_df = impute_categorical_cols(full_train_df, _cat_cols)
+        full_train_df = binarize_target(full_train_df)
+        best_result_features, _ = load_best_results_features_and_iteration(split_type)
+        full_train_df = full_train_df[best_result_features + ["rating"]]
+        cat_cols = [col for col in best_result_features if col in _cat_cols]
+
+        test_df = test_df[best_result_features + ["rating"]]  # type: ignore
+
+    else:
+        train_df, val_df, cat_cols = experiment_without_feat_engineering(
+            split_type=split_type
+        )
+        test_df = pd.read_csv(
+            Path(DATA_DIR)
+            / TRAIN_VAL_TEST_SPLITS_DIR
+            / MOVIELENS_SPLITS_DIR
+            / "test.csv"
+        )
+        test_df = test_df[train_df.columns]
+        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
     full_train_df_encoded = encoder.fit_transform(full_train_df)
+
+    test_df = impute_categorical_cols(test_df, cat_cols)
+    test_df = binarize_target(test_df)
     test_df_encoded = encoder.transform(test_df)
 
     X_train = full_train_df_encoded.drop(columns=["rating"])
@@ -61,22 +101,35 @@ def set_lgb_datasets() -> Tuple[lgb.Dataset, lgb.Dataset]:
 
 
 def train_lgb_model_and_evaluate_ranking_metrics(
-    k_values: List[int] = [5, 10, 20]
+    with_feat_engineering: bool = False,
+    split_type: Literal["ts", "li"] = "ts",
+    k_values: List[int] = [5, 10, 20],
 ) -> Dict[int, Dict[str, float]]:
 
-    with open(
-        Path(RESULTS_DIR) / "results_lgb_with_default_params" / "model.pkl", "rb"
-    ) as f:
-        model_with_default_params = pickle.load(f)
+    if with_feat_engineering:
+        _, best_iteration = load_best_results_features_and_iteration(split_type)
+    else:
+        with open(
+            Path(RESULTS_DIR)
+            / f"results_lgb_with_default_params_{split_type}"
+            / "model.pkl",
+            "rb",
+        ) as f:
+            model_with_default_params = pickle.load(f)
+        best_iteration = model_with_default_params.num_trees()
 
-    results_dir = Path(RESULTS_DIR) / "lgb_ranking_metrics"
+    with_feat_engineering_suffix = "with" if with_feat_engineering else "without"
+    results_dir = (
+        Path(RESULTS_DIR)
+        / f"results_lgb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    train_data, test_data = set_lgb_datasets()
+    train_data, test_data = set_lgb_datasets(split_type, with_feat_engineering)
 
     model = lgb.train(
         {
-            "n_estimators": model_with_default_params.num_trees(),
+            "n_estimators": best_iteration,
             "objective": "binary",
             "metric": "binary_logloss",
         },
@@ -109,4 +162,18 @@ def train_lgb_model_and_evaluate_ranking_metrics(
 
 
 if __name__ == "__main__":
-    train_lgb_model_and_evaluate_ranking_metrics()
+    train_lgb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True, split_type="ts"
+    )
+
+    train_lgb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=False, split_type="ts"
+    )
+
+    train_lgb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True, split_type="li"
+    )
+
+    train_lgb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=False, split_type="li"
+    )

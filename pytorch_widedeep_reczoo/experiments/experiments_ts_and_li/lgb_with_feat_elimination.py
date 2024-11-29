@@ -10,7 +10,7 @@ from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
-    experiment_with_feature_engineering,
+    experiment_with_feat_engineering,
 )
 
 
@@ -26,9 +26,7 @@ def create_initial_datasets(
     pd.Series,
     List[str],
 ]:
-    train_df, val_df, cat_cols = experiment_with_feature_engineering(
-        use_umap, split_type
-    )
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -136,7 +134,8 @@ def run_lgb_feature_elimination(
         print("-" * 100)
 
     results_dir = (
-        Path(RESULTS_DIR) / f"results_lgb_feature_elimination_{use_umap}_{split_type}"
+        Path(RESULTS_DIR)
+        / f"results_lgb_with_feature_elimination_{use_umap}_{split_type}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 

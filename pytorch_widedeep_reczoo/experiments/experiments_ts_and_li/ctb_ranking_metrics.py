@@ -1,5 +1,5 @@
 import pickle
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Literal
 from pathlib import Path
 
 import pandas as pd
@@ -14,66 +14,152 @@ from rec_tools.constants import (
 from rec_tools.ranking_metrics import map_at_k, hit_ratio_at_k, binary_ndcg_at_k
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
     binarize_target,
+    find_categorical_cols,
     impute_categorical_cols,
+    load_and_merge_features,
     experiment_without_feat_engineering,
 )
 
+SELECT_FEATURES_ALGORITHM_SUFFIX_MAP = {
+    "RecursiveByPredictionValuesChange": "pvc",
+    "RecursiveByLossFunctionChange": "lfc",
+    "RecursiveByShapValues": "shap",
+}
 
-def set_ctb_datasets() -> Tuple[ctb.Pool, ctb.Pool]:
-    train_df, val_df, cat_cols = experiment_without_feat_engineering()
 
-    full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+def load_best_results_features_and_iteration(
+    select_features_algorithm: Literal[
+        "RecursiveByLossFunctionChange",
+        "RecursiveByShapValues",
+        "RecursiveByPredictionValuesChange",
+    ],
+    split_type: Literal["ts", "li"],
+) -> Tuple[List[str], int]:
 
-    test_df = pd.read_csv(
-        Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / MOVIELENS_SPLITS_DIR / "test.csv"
+    fs_suffix = SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
+    res_dir = (
+        Path(RESULTS_DIR)
+        / f"results_ctb_native_feature_selection_ch_{split_type}_{fs_suffix}"
     )
-    test_df = binarize_target(test_df)
-    test_df = impute_categorical_cols(test_df, cat_cols)
+    with open(res_dir / "results.pkl", "rb") as f:
+        results = pickle.load(f)
 
-    full_train_df = full_train_df[cat_cols + ["rating"]]
-    test_df = test_df[cat_cols + ["rating"]]
+    best_trial_features = results["features"]
+    best_iteration = results["best_iteration"]
+
+    return best_trial_features, best_iteration
+
+
+def set_ctb_datasets(
+    split_type: Literal["ts", "li"],
+    with_feat_engineering: bool = False,
+    select_features_algorithm: (
+        Literal[
+            "RecursiveByLossFunctionChange",
+            "RecursiveByShapValues",
+            "RecursiveByPredictionValuesChange",
+        ]
+        | None
+    ) = None,
+) -> Tuple[ctb.Pool, ctb.Pool]:
+    if with_feat_engineering:
+        train_df, val_df = load_and_merge_features(
+            split="train_val", use_umap="ch", split_type=split_type
+        )
+        test_df = load_and_merge_features(
+            split="test", use_umap="ch", split_type=split_type
+        )
+        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+
+        _cat_cols = find_categorical_cols(full_train_df)
+        full_train_df = impute_categorical_cols(full_train_df, _cat_cols)
+        full_train_df = binarize_target(full_train_df)
+        best_result_features, _ = load_best_results_features_and_iteration(
+            select_features_algorithm, split_type
+        )
+        full_train_df = full_train_df[best_result_features + ["rating"]]
+        cat_cols = [col for col in best_result_features if col in _cat_cols]
+
+        test_df = test_df[best_result_features + ["rating"]]  # type: ignore
+
+    else:
+        train_df, val_df, cat_cols = experiment_without_feat_engineering(
+            split_type=split_type
+        )
+        test_df = pd.read_csv(
+            Path(DATA_DIR)
+            / TRAIN_VAL_TEST_SPLITS_DIR
+            / MOVIELENS_SPLITS_DIR
+            / "test.csv"
+        )
+        test_df = test_df[train_df.columns]
+        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+
+    test_df = impute_categorical_cols(test_df, cat_cols)
+    test_df = binarize_target(test_df)
 
     X_train = full_train_df.drop(columns=["rating"])
     y_train = full_train_df["rating"]
     X_test = test_df.drop(columns=["rating"])
     y_test = test_df["rating"]
 
-    train_data = ctb.Pool(
-        X_train,
-        label=y_train,
-        cat_features=cat_cols,
-    )
-
-    test_data = ctb.Pool(
-        X_test,
-        label=y_test,
-        cat_features=cat_cols,
-    )
+    train_data = ctb.Pool(data=X_train, label=y_train, cat_features=cat_cols)
+    test_data = ctb.Pool(data=X_test, label=y_test, cat_features=cat_cols)
 
     return train_data, test_data
 
 
 def train_ctb_model_and_evaluate_ranking_metrics(
-    k_values: List[int] = [5, 10, 20]
+    with_feat_engineering: bool = False,
+    split_type: Literal["ts", "li"] = "ts",
+    k_values: List[int] = [5, 10, 20],
+    select_features_algorithm: (
+        Literal[
+            "RecursiveByLossFunctionChange",
+            "RecursiveByShapValues",
+            "RecursiveByPredictionValuesChange",
+        ]
+        | None
+    ) = None,
 ) -> Dict[int, Dict[str, float]]:
 
-    with open(
-        Path(RESULTS_DIR) / "results_ctb_with_default_params" / "model.pkl", "rb"
-    ) as f:
-        model_with_default_params = pickle.load(f)
+    if with_feat_engineering:
+        _, best_iteration = load_best_results_features_and_iteration(
+            select_features_algorithm, split_type
+        )
+    else:
+        with open(
+            Path(RESULTS_DIR)
+            / f"results_ctb_with_default_params_{split_type}"
+            / "model.pkl",
+            "rb",
+        ) as f:
+            model_with_default_params = pickle.load(f)
+        best_iteration = model_with_default_params.tree_count_
 
-    results_dir = Path(RESULTS_DIR) / "ctb_ranking_metrics"
+    with_feat_engineering_suffix = "with" if with_feat_engineering else "without"
+    fs_suffix = (
+        SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
+        if select_features_algorithm
+        else "nofs"
+    )
+    results_dir = (
+        Path(RESULTS_DIR)
+        / f"results_ctb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}_{fs_suffix}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    train_data, test_data = set_ctb_datasets()
+    train_data, test_data = set_ctb_datasets(
+        split_type, with_feat_engineering, select_features_algorithm
+    )
 
     model = ctb.train(
         pool=train_data,
         params={
+            "iterations": best_iteration,
             "loss_function": "Logloss",
-            "iterations": model_with_default_params.get_best_iteration(),
-            "allow_writing_files": False,
-            "verbose": True,
+            "eval_metric": "Logloss",
+            "verbose": False,
         },
     )
 
@@ -103,4 +189,48 @@ def train_ctb_model_and_evaluate_ranking_metrics(
 
 
 if __name__ == "__main__":
-    train_ctb_model_and_evaluate_ranking_metrics()
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="ts",
+        select_features_algorithm="RecursiveByLossFunctionChange",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="li",
+        select_features_algorithm="RecursiveByLossFunctionChange",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="ts",
+        select_features_algorithm="RecursiveByShapValues",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="li",
+        select_features_algorithm="RecursiveByShapValues",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="ts",
+        select_features_algorithm="RecursiveByPredictionValuesChange",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="li",
+        select_features_algorithm="RecursiveByPredictionValuesChange",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=False,
+        split_type="ts",
+    )
+
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=False,
+        split_type="li",
+    )
