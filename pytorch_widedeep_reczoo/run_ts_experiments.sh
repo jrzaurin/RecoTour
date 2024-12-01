@@ -1,9 +1,9 @@
-python experiments/experiments_ts_and_li/lgb_with_default_params.py
-python experiments/experiments_ts_and_li/ctb_with_default_params.py
-python experiments/experiments_ts_and_li/ctb_with_text_and_default_params.py
+# python experiments/experiments_ts_and_li/lgb_with_default_params.py
+# python experiments/experiments_ts_and_li/ctb_with_default_params.py
+# python experiments/experiments_ts_and_li/ctb_with_text_and_default_params.py
 
-python experiments/experiments_ts_and_li/lgb_with_hyperopt.py
-python experiments/experiments_ts_and_li/lgb_with_optuna.py
+# python experiments/experiments_ts_and_li/lgb_with_hyperopt.py
+# python experiments/experiments_ts_and_li/lgb_with_optuna.py
 
 python experiments/experiments_ts_and_li/lgb_with_feat_elimination.py
 python experiments/experiments_ts_and_li/ctb_with_feat_elimination.py

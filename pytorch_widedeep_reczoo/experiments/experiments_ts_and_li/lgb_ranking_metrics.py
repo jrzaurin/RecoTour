@@ -26,7 +26,9 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
 def load_best_results_features_and_iteration(
     split_type: Literal["ts", "li"]
 ) -> Tuple[List[str], int]:
-    res_dir = Path(RESULTS_DIR) / f"results_lgb_feature_elimination_ch_{split_type}"
+    res_dir = (
+        Path(RESULTS_DIR) / f"results_lgb_with_feature_elimination_ch_{split_type}"
+    )
     with open(res_dir / "results.pkl", "rb") as f:
         results = pickle.load(f)
 

@@ -39,7 +39,7 @@ def load_best_results_features_and_iteration(
     fs_suffix = SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
     res_dir = (
         Path(RESULTS_DIR)
-        / f"results_ctb_native_feature_selection_ch_{split_type}_{fs_suffix}"
+        / f"results_ctb_with_native_feature_selection_ch_{split_type}_{fs_suffix}"
     )
     with open(res_dir / "results.pkl", "rb") as f:
         results = pickle.load(f)
