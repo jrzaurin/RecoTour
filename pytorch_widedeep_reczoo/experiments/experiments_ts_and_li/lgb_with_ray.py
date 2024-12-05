@@ -9,7 +9,7 @@ import mlflow
 import pandas as pd
 import lightgbm as lgb
 from ray import tune, train
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
 from ray.tune.schedulers import HyperBandScheduler
 from pytorch_widedeep.utils import LabelEncoder
 from ray.tune.search.hyperopt import HyperOptSearch
@@ -38,6 +38,7 @@ def train_lgbm(
     y_val: pd.Series,
     cat_cols: List[str],
     track_with_mlflow: bool,
+    binary_target: bool,
 ) -> None:
 
     train_data = lgb.Dataset(
@@ -48,8 +49,8 @@ def train_lgbm(
     )
 
     params = {
-        "objective": "binary",
-        "metric": "binary_logloss",
+        "objective": "binary" if binary_target else "regression",
+        "metric": "binary_logloss" if binary_target else "rmse",
         "verbose": -1,
         **config,
     }
@@ -61,25 +62,35 @@ def train_lgbm(
         callbacks=[lgb.early_stopping(50)],
     )
 
-    y_pred = model.predict(X_val)
-    y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
-    valid_loss = model.best_score["valid_0"]["binary_logloss"]
-
-    accuracy = accuracy_score(y_val, y_pred_labels)
-    f1 = f1_score(y_val, y_pred_labels)
-
-    if track_with_mlflow:
-        mlflow.log_params(config)
-        mlflow.log_metrics({"accuracy": accuracy, "f1_score": f1})
-
-    train.report({"accuracy": accuracy, "f1_score": f1, "val_loss": valid_loss})
+    _y_pred = model.predict(X_val)
+    if binary_target:
+        y_pred = (_y_pred > 0.5).astype(int)  # type: ignore
+        accuracy = accuracy_score(y_val, y_pred)
+        f1 = f1_score(y_val, y_pred)
+        valid_loss = model.best_score["valid_0"]["binary_logloss"]
+        if track_with_mlflow:
+            mlflow.log_params(config)
+            mlflow.log_metrics(
+                {"accuracy": accuracy, "f1_score": f1, "val_loss": valid_loss}
+            )
+        train.report({"accuracy": accuracy, "f1_score": f1, "val_loss": valid_loss})
+    else:
+        y_pred = _y_pred  # type: ignore
+        rmse = root_mean_squared_error(y_val, y_pred)
+        # valid loss is the rmse, but we include it in the report for consistency
+        valid_loss = model.best_score["valid_0"]["rmse"]
+        if track_with_mlflow:
+            mlflow.log_params(config)
+            mlflow.log_metrics({"rmse": rmse, "val_loss": valid_loss})
+        train.report({"rmse": rmse, "val_loss": valid_loss})
 
 
 def run_optimization(
     split_type: Literal["ts", "li"] = "ts",
     use_umap: Literal["st", "ch"] = "ch",
+    binary_target: bool = True,
     optimizer: Literal["tpe", "hyperband"] = "tpe",
-    num_trials: int = 200,
+    num_trials: int = 100,
     track_with_mlflow: bool = False,
     experiment_name: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
@@ -92,7 +103,9 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(
+        use_umap, split_type, binary_target
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -127,7 +140,12 @@ def run_optimization(
             scheduler = HyperBandScheduler(metric="val_loss", mode="min")
 
         results_dir = os.path.abspath(
-            "/".join([RESULTS_DIR, f"results_lgb_with_ray_{use_umap}_{split_type}"])
+            "/".join(
+                [
+                    RESULTS_DIR,
+                    f"results_lgb_with_ray_{use_umap}_{split_type}_{'binary' if binary_target else 'regression'}",
+                ]
+            )
         )
 
         tuner = tune.Tuner(
@@ -139,6 +157,7 @@ def run_optimization(
                 y_val=y_val,
                 cat_cols=encoder.columns_to_encode,
                 track_with_mlflow=track_with_mlflow,
+                binary_target=binary_target,
             ),
             tune_config=tune.TuneConfig(
                 metric="val_loss" if optimizer.lower() == "tpe" else None,
@@ -160,15 +179,25 @@ def run_optimization(
             metric="val_loss", mode="min", scope="all"
         )
 
-        best_experiment_info = {
-            "metrics": {
-                "accuracy": best_result.metrics["accuracy"],
-                "f1": best_result.metrics["f1_score"],
-                "val_loss": best_result.metrics["val_loss"],
-            },
-            "config": best_result.config,
-            "experiment_path": best_result.path,
-        }
+        if binary_target:
+            best_experiment_info = {
+                "metrics": {
+                    "accuracy": best_result.metrics["accuracy"],
+                    "f1": best_result.metrics["f1_score"],
+                    "val_loss": best_result.metrics["val_loss"],
+                },
+                "config": best_result.config,
+                "experiment_path": best_result.path,
+            }
+        else:
+            best_experiment_info = {
+                "metrics": {
+                    "rmse": best_result.metrics["rmse"],
+                    "val_loss": best_result.metrics["val_loss"],
+                },
+                "config": best_result.config,
+                "experiment_path": best_result.path,
+            }
 
         with open(
             Path(results_dir) / f"results_lgbm_ray_{optimizer}" / "results.json",
@@ -184,7 +213,11 @@ def run_optimization(
 
 if __name__ == "__main__":
 
-    # run_optimization(optimizer="tpe", split_type="ts")
-    # run_optimization(optimizer="tpe", split_type="li")
-    run_optimization(optimizer="hyperband", split_type="ts")
-    run_optimization(optimizer="hyperband", split_type="li")
+    # run_optimization(optimizer="tpe", split_type="ts", binary_target=True)
+    # run_optimization(optimizer="tpe", split_type="li", binary_target=True)
+    run_optimization(optimizer="hyperband", split_type="ts", binary_target=True)
+    run_optimization(optimizer="hyperband", split_type="li", binary_target=True)
+    # run_optimization(optimizer="tpe", split_type="ts", binary_target=False)
+    # run_optimization(optimizer="tpe", split_type="li", binary_target=False)
+    run_optimization(optimizer="hyperband", split_type="ts", binary_target=False)
+    run_optimization(optimizer="hyperband", split_type="li", binary_target=False)

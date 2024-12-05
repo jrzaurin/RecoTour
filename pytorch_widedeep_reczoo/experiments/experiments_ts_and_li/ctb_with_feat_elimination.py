@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import catboost as ctb
 from catboost import Pool
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
@@ -16,8 +16,11 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
 def create_initial_datasets(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
+    binary_target: bool,
 ) -> Tuple[Pool, Pool, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
-    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(
+        use_umap, split_type, binary_target
+    )
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -33,9 +36,10 @@ def create_initial_datasets(
 def run_catboost_feature_elimination(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
+    binary_target: bool,
 ) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets(use_umap, split_type)
+        create_initial_datasets(use_umap, split_type, binary_target)
     )
 
     results = {}
@@ -59,8 +63,8 @@ def run_catboost_feature_elimination(
             pool=train_data,
             params={
                 "num_boost_round": 500,
-                "loss_function": "Logloss",
-                "eval_metric": "Logloss",
+                "loss_function": "Logloss" if binary_target else "RMSE",
+                "eval_metric": "Logloss" if binary_target else "RMSE",
                 "early_stopping_rounds": 50,
                 "allow_writing_files": False,
                 "verbose": True,
@@ -68,18 +72,26 @@ def run_catboost_feature_elimination(
             eval_set=val_data,
         )
 
-        y_pred = model.predict(val_data, prediction_type="Probability")[:, 1]
-        y_pred_labels = (y_pred > 0.5).astype(int)
-        accuracy = accuracy_score(y_val, y_pred_labels)
-        f1 = f1_score(y_val, y_pred_labels)
-        val_loss = model.get_best_score()["validation"]["Logloss"]
-
-        results[trial] = {
-            "features": current_features.copy(),
-            "acc": accuracy,
-            "f1": f1,
-            "val_loss": val_loss,
-        }
+        if binary_target:
+            y_pred = model.predict(val_data, prediction_type="Probability")[:, 1]
+            y_pred_labels = (y_pred > 0.5).astype(int)
+            accuracy = accuracy_score(y_val, y_pred_labels)
+            f1 = f1_score(y_val, y_pred_labels)
+            val_loss = model.get_best_score()["validation"]["Logloss"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "acc": accuracy,
+                "f1": f1,
+                "val_loss": val_loss,
+            }
+        else:
+            rmse = root_mean_squared_error(y_val, model.predict(val_data))
+            val_loss = model.get_best_score()["validation"]["RMSE"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "rmse": rmse,
+                "val_loss": val_loss,
+            }
 
         importance = model.get_feature_importance()
         feature_importance = pd.DataFrame(
@@ -115,18 +127,23 @@ def run_catboost_feature_elimination(
         trial += 1
 
         print("-" * 100)
-        print(
-            f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
-        )
+        if binary_target:
+            print(
+                f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
+            )
+        else:
+            print(f"Trial {trial} metrics: rmse: {rmse}, val_loss: {val_loss}")
         print("-" * 100)
 
     # Phase 2: Eliminate protected features until only 2 remain
+    # Note: there is a lot of code repetition. For now I am happy to leave it as
+    # is.
     while len(current_features) > 2:
         model = ctb.train(
             pool=train_data,
             params={
-                "loss_function": "Logloss",
-                "eval_metric": "Accuracy",
+                "loss_function": "Logloss" if binary_target else "RMSE",
+                "eval_metric": "Logloss" if binary_target else "RMSE",
                 "early_stopping_rounds": 50,
                 "allow_writing_files": False,
                 "verbose": False,
@@ -134,19 +151,28 @@ def run_catboost_feature_elimination(
             eval_set=val_data,
         )
 
-        y_pred = model.predict(val_data, prediction_type="Probability")[:, 1]
-        y_pred_labels = (y_pred > 0.5).astype(int)
-        accuracy = accuracy_score(y_val, y_pred_labels)
-        f1 = f1_score(y_val, y_pred_labels)
-        val_loss = model.get_best_score()["validation"]["Logloss"]
-
-        results[trial] = {
-            "features": current_features.copy(),
-            "accuracy": accuracy,
-            "f1": f1,
-            "val_loss": val_loss,
-            "best_iteration": model.get_best_iteration(),
-        }
+        if binary_target:
+            y_pred = model.predict(val_data, prediction_type="Probability")[:, 1]
+            y_pred_labels = (y_pred > 0.5).astype(int)
+            accuracy = accuracy_score(y_val, y_pred_labels)
+            f1 = f1_score(y_val, y_pred_labels)
+            val_loss = model.get_best_score()["validation"]["Logloss"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "accuracy": accuracy,
+                "f1": f1,
+                "val_loss": val_loss,
+                "best_iteration": model.get_best_iteration(),
+            }
+        else:
+            rmse = root_mean_squared_error(y_val, model.predict(val_data))
+            val_loss = model.get_best_score()["validation"]["RMSE"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "rmse": rmse,
+                "val_loss": val_loss,
+                "best_iteration": model.get_best_iteration(),
+            }
 
         importance = model.get_feature_importance()
         feature_importance = pd.DataFrame(
@@ -175,14 +201,17 @@ def run_catboost_feature_elimination(
         trial += 1
 
         print("-" * 100)
-        print(
-            f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
-        )
+        if binary_target:
+            print(
+                f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
+            )
+        else:
+            print(f"Trial {trial} metrics: rmse: {rmse}, val_loss: {val_loss}")
         print("-" * 100)
 
     results_dir = (
         Path(RESULTS_DIR)
-        / f"results_ctb_with_feature_elimination_{use_umap}_{split_type}"
+        / f"results_ctb_with_feature_elimination_{use_umap}_{split_type}_{'binary' if binary_target else 'regression'}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
     with open(results_dir / "results.pkl", "wb") as f:
@@ -192,5 +221,15 @@ def run_catboost_feature_elimination(
 
 
 if __name__ == "__main__":
-    # results_ts = run_catboost_feature_elimination(use_umap="ch", split_type="ts")
-    results_li = run_catboost_feature_elimination(use_umap="ch", split_type="li")
+    results_ts = run_catboost_feature_elimination(
+        use_umap="ch", split_type="ts", binary_target=False
+    )
+    results_li = run_catboost_feature_elimination(
+        use_umap="ch", split_type="li", binary_target=False
+    )
+    results_ts_binary = run_catboost_feature_elimination(
+        use_umap="ch", split_type="ts", binary_target=True
+    )
+    results_li_binary = run_catboost_feature_elimination(
+        use_umap="ch", split_type="li", binary_target=True
+    )

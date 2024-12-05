@@ -9,7 +9,7 @@ import mlflow
 import pandas as pd
 import catboost as ctb
 from ray import tune, train
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
 from ray.tune.schedulers import HyperBandScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
 
@@ -35,6 +35,7 @@ def train_catboost(
     X_val: pd.DataFrame,
     y_train: pd.Series,
     y_val: pd.Series,
+    binary_target: bool,
     cat_cols: List[str],
     track_with_mlflow: bool,
 ) -> None:
@@ -56,7 +57,8 @@ def train_catboost(
             "iterations": 500,
             "early_stopping_rounds": 50,
             "verbose": 0,
-            "loss_function": "Logloss",
+            "loss_function": "Logloss" if binary_target else "RMSE",
+            "eval_metric": "Logloss" if binary_target else "RMSE",
             "learning_rate": config["learning_rate"],
             "depth": config["depth"],
             "l2_leaf_reg": config["l2_leaf_reg"],
@@ -65,23 +67,30 @@ def train_catboost(
         eval_set=val_pool,
     )
 
-    y_pred = model.predict(val_pool, prediction_type="Probability")[:, 1]
-    y_pred_labels = (y_pred > 0.5).astype(int)
-    valid_loss = model.get_best_score()["validation"]["Logloss"]
-
-    accuracy = accuracy_score(y_val, y_pred_labels)
-    f1 = f1_score(y_val, y_pred_labels)
-
-    if track_with_mlflow:
-        mlflow.log_params(config)
-        mlflow.log_metrics({"accuracy": accuracy, "f1_score": f1})
-
-    train.report({"accuracy": accuracy, "f1_score": f1, "val_loss": valid_loss})
+    if binary_target:
+        y_pred = model.predict(val_pool, prediction_type="Probability")[:, 1]
+        y_pred_labels = (y_pred > 0.5).astype(int)
+        valid_loss = model.get_best_score()["validation"]["Logloss"]
+        accuracy = accuracy_score(y_val, y_pred_labels)
+        f1 = f1_score(y_val, y_pred_labels)
+        if track_with_mlflow:
+            mlflow.log_params(config)
+            mlflow.log_metrics({"accuracy": accuracy, "f1_score": f1})
+        train.report({"accuracy": accuracy, "f1_score": f1, "val_loss": valid_loss})
+    else:
+        y_pred = model.predict(val_pool)
+        valid_loss = model.get_best_score()["validation"]["RMSE"]
+        rmse = root_mean_squared_error(y_val, y_pred)
+        if track_with_mlflow:
+            mlflow.log_params(config)
+            mlflow.log_metrics({"rmse": rmse})
+        train.report({"rmse": rmse, "val_loss": valid_loss})
 
 
 def run_optimization(
     split_type: Literal["ts", "li"],
     use_umap: Literal["st", "ch"],
+    binary_target: bool,
     optimizer: Literal["tpe", "hyperband"],
     num_trials: int = 100,
     track_with_mlflow: bool = False,
@@ -96,7 +105,9 @@ def run_optimization(
         if experiment_name:
             mlflow.set_experiment(experiment_name)
 
-    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(
+        use_umap, split_type, binary_target
+    )
 
     y_train = train_df["rating"]
     y_val = val_df["rating"]
@@ -123,7 +134,12 @@ def run_optimization(
 
         # Update results directory path
         results_dir = os.path.abspath(
-            "/".join([RESULTS_DIR, f"results_ctb_with_ray_{use_umap}_{split_type}"])
+            "/".join(
+                [
+                    RESULTS_DIR,
+                    f"results_ctb_with_ray_{use_umap}_{split_type}_{'binary' if binary_target else 'regression'}",
+                ]
+            )
         )
 
         tuner = tune.Tuner(
@@ -135,6 +151,7 @@ def run_optimization(
                 y_val=y_val,
                 cat_cols=cat_cols,
                 track_with_mlflow=track_with_mlflow,
+                binary_target=binary_target,
             ),
             tune_config=tune.TuneConfig(
                 metric="val_loss" if optimizer == "tpe" else None,
@@ -142,6 +159,7 @@ def run_optimization(
                 search_alg=search_alg,
                 scheduler=scheduler,
                 num_samples=num_trials,
+                time_budget_s=90 * 60,  # 90 minutes budget
             ),
             param_space=search_space,
             run_config=train.RunConfig(
@@ -156,16 +174,26 @@ def run_optimization(
             metric="val_loss", mode="min", scope="all"
         )
 
-        # Add best experiment info saving
-        best_experiment_info = {
-            "metrics": {
-                "accuracy": best_result.metrics["accuracy"],
-                "f1": best_result.metrics["f1_score"],
-                "val_loss": best_result.metrics["val_loss"],
-            },
-            "config": best_result.config,
-            "experiment_path": best_result.path,
-        }
+        if binary_target:
+            # Add best experiment info saving
+            best_experiment_info = {
+                "metrics": {
+                    "accuracy": best_result.metrics["accuracy"],
+                    "f1": best_result.metrics["f1_score"],
+                    "val_loss": best_result.metrics["val_loss"],
+                },
+                "config": best_result.config,
+                "experiment_path": best_result.path,
+            }
+        else:
+            best_experiment_info = {
+                "metrics": {
+                    "rmse": best_result.metrics["rmse"],
+                    "val_loss": best_result.metrics["val_loss"],
+                },
+                "config": best_result.config,
+                "experiment_path": best_result.path,
+            }
 
         with open(
             Path(results_dir) / f"results_ctb_ray_{optimizer}" / "results.json",
@@ -180,7 +208,27 @@ def run_optimization(
 
 
 if __name__ == "__main__":
-    # run_optimization(optimizer="tpe", use_umap="ch", split_type="ts")
-    # run_optimization(optimizer="tpe", use_umap="ch", split_type="li")
-    run_optimization(optimizer="hyperband", use_umap="ch", split_type="ts")
-    run_optimization(optimizer="hyperband", use_umap="ch", split_type="li")
+    # run_optimization(
+    #     optimizer="tpe", use_umap="ch", split_type="ts", binary_target=True
+    # )
+    # run_optimization(
+    #     optimizer="tpe", use_umap="ch", split_type="li", binary_target=True
+    # )
+    run_optimization(
+        optimizer="hyperband", use_umap="ch", split_type="ts", binary_target=True
+    )
+    run_optimization(
+        optimizer="hyperband", use_umap="ch", split_type="li", binary_target=True
+    )
+    # run_optimization(
+    #     optimizer="tpe", use_umap="ch", split_type="ts", binary_target=False
+    # )
+    # run_optimization(
+    #     optimizer="tpe", use_umap="ch", split_type="li", binary_target=False
+    # )
+    run_optimization(
+        optimizer="hyperband", use_umap="ch", split_type="ts", binary_target=False
+    )
+    run_optimization(
+        optimizer="hyperband", use_umap="ch", split_type="li", binary_target=False
+    )

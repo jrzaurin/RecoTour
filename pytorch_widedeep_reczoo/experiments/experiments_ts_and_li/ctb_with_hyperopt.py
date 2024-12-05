@@ -5,7 +5,7 @@ from pathlib import Path
 
 import catboost as ctb
 from hyperopt import Trials, hp, tpe, fmin, space_eval
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
 from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
@@ -20,11 +20,17 @@ class CTBOptimizerHyperopt(object):
     def __init__(
         self,
         verbose: bool = False,
-        score: Literal["accuracy", "f1", "binary_logloss"] = "binary_logloss",
+        binary_target: bool = True,
+        score: Literal["accuracy", "f1", "logloss", "rmse"] = "logloss",
     ):
         self.verbose = verbose
+        self.binary_target = binary_target
         self.score = score
         self.max_or_min = "max" if score in ["accuracy", "f1"] else "min"
+
+        assert self.binary_target == (
+            self.score in ["accuracy", "f1", "logloss"]
+        ), "binary_target must be True if score is accuracy, f1, or logloss"
 
     def optimize(
         self,
@@ -37,7 +43,7 @@ class CTBOptimizerHyperopt(object):
             "iterations": 500,
             "early_stopping_rounds": 50,
             "verbose": False,
-            "loss_function": "Logloss",
+            "loss_function": "Logloss" if self.binary_target else "RMSE",
         }
 
         param_space = self.hyperparameter_space()
@@ -63,7 +69,7 @@ class CTBOptimizerHyperopt(object):
             params["iterations"] = 500
             params["early_stopping_rounds"] = 50
             params["verbose"] = 1
-            params["loss_function"] = "Logloss"
+            params["loss_function"] = "Logloss" if self.binary_target else "RMSE"
             params["depth"] = int(params["depth"])
             params["min_data_in_leaf"] = int(params["min_data_in_leaf"])
 
@@ -81,7 +87,11 @@ class CTBOptimizerHyperopt(object):
                 preds_labels = (preds > 0.5).astype(int)
                 score = -f1_score(deval.get_label(), preds_labels)
             else:
-                score = model.get_best_score()["validation"]["Logloss"]
+                score = (
+                    model.get_best_score()["validation"]["Logloss"]
+                    if self.binary_target
+                    else model.get_best_score()["validation"]["RMSE"]
+                )
 
             return score
 
@@ -102,10 +112,14 @@ class CTBOptimizerHyperopt(object):
             return space
 
 
-def run_ts_lgb_with_hyperopt(
-    use_umap: Literal["st", "ch"], split_type: Literal["ts", "li"] = "ts"
+def run_ts_ctb_with_hyperopt(
+    use_umap: Literal["st", "ch"],
+    split_type: Literal["ts", "li"] = "ts",
+    binary_target: bool = True,
 ) -> None:
-    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(
+        use_umap, split_type, binary_target
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -118,7 +132,8 @@ def run_ts_lgb_with_hyperopt(
     X_val = val_df_encoded.drop("rating", axis=1)
 
     results_dir = (
-        Path(RESULTS_DIR) / f"results_ctb_with_hyperopt_{use_umap}_{split_type}"
+        Path(RESULTS_DIR)
+        / f"results_ctb_with_hyperopt_{use_umap}_{split_type}_{'binary' if binary_target else 'regression'}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -133,7 +148,11 @@ def run_ts_lgb_with_hyperopt(
         cat_features=encoder.columns_to_encode,
     )
 
-    tuner = CTBOptimizerHyperopt(verbose=True)
+    tuner = CTBOptimizerHyperopt(
+        verbose=True,
+        binary_target=binary_target,
+        score="logloss" if binary_target else "rmse",
+    )
     tuner.optimize(train_pool, valid_pool)
 
     model = ctb.train(
@@ -142,26 +161,35 @@ def run_ts_lgb_with_hyperopt(
         eval_set=valid_pool,
     )
 
-    y_pred = model.predict(X_val, prediction_type="Probability")[:, 1]
-    y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
-
-    accuracy = accuracy_score(y_val, y_pred_labels)
-    f1 = f1_score(y_val, y_pred_labels)
-
-    best_trial = {
-        "best_params": tuner.best,
-        "accuracy": accuracy,
-        "f1": f1,
-        "val_loss": model.get_best_score()["validation"]["Logloss"],
-    }
+    if binary_target:
+        y_pred = model.predict(X_val, prediction_type="Probability")[:, 1]
+        y_pred_labels = (y_pred > 0.5).astype(int)  # type: ignore
+        accuracy = accuracy_score(y_val, y_pred_labels)
+        f1 = f1_score(y_val, y_pred_labels)
+        best_trial = {
+            "best_params": tuner.best,
+            "accuracy": accuracy,
+            "f1": f1,
+            "val_loss": model.get_best_score()["validation"]["Logloss"],
+        }
+        print("Accuracy: ", accuracy)
+        print("F1: ", f1)
+    else:
+        rmse = root_mean_squared_error(y_val, model.predict(X_val))
+        # val_loss is the same as rmse, but we keep it in the report for consistency
+        best_trial = {
+            "best_params": tuner.best,
+            "rmse": rmse,
+            "val_loss": model.get_best_score()["validation"]["RMSE"],
+        }
+        print("RMSE: ", rmse)
 
     with open(results_dir / "results.json", "w") as f:
         json.dump(best_trial, f, indent=4)
 
-    print("Accuracy: ", accuracy)
-    print("F1: ", f1)
-
 
 if __name__ == "__main__":
-    # run_ts_lgb_with_hyperopt(use_umap="ch", split_type="ts")
-    run_ts_lgb_with_hyperopt(use_umap="ch", split_type="li")
+    run_ts_ctb_with_hyperopt(use_umap="ch", split_type="ts", binary_target=True)
+    # run_ts_ctb_with_hyperopt(use_umap="ch", split_type="li", binary_target=True)
+    run_ts_ctb_with_hyperopt(use_umap="ch", split_type="ts", binary_target=False)
+    run_ts_ctb_with_hyperopt(use_umap="ch", split_type="li", binary_target=False)

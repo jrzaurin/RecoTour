@@ -24,10 +24,12 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
 
 
 def load_best_results_features_and_iteration(
-    split_type: Literal["ts", "li"]
+    split_type: Literal["ts", "li"],
+    binary_target: bool,
 ) -> Tuple[List[str], int]:
     res_dir = (
-        Path(RESULTS_DIR) / f"results_lgb_with_feature_elimination_ch_{split_type}"
+        Path(RESULTS_DIR)
+        / f"results_lgb_with_feature_elimination_ch_{split_type}_{'binary' if binary_target else 'regression'}"
     )
     with open(res_dir / "results.pkl", "rb") as f:
         results = pickle.load(f)
@@ -40,7 +42,9 @@ def load_best_results_features_and_iteration(
 
 
 def set_lgb_datasets(
-    split_type: Literal["ts", "li"], with_feat_engineering: bool = False
+    split_type: Literal["ts", "li"],
+    with_feat_engineering: bool = False,
+    binary_target: bool = True,
 ) -> Tuple[lgb.Dataset, lgb.Dataset]:
     if with_feat_engineering:
         train_df, val_df = load_and_merge_features(
@@ -50,19 +54,23 @@ def set_lgb_datasets(
             split="test", use_umap="ch", split_type=split_type
         )
         full_train_df = pd.concat([train_df, val_df], ignore_index=True)
-
         _cat_cols = find_categorical_cols(full_train_df)
+
         full_train_df = impute_categorical_cols(full_train_df, _cat_cols)
-        full_train_df = binarize_target(full_train_df)
-        best_result_features, _ = load_best_results_features_and_iteration(split_type)
+        if binary_target:
+            full_train_df = binarize_target(full_train_df)
+
+        best_result_features, _ = load_best_results_features_and_iteration(
+            split_type, binary_target
+        )
+
         full_train_df = full_train_df[best_result_features + ["rating"]]
         cat_cols = [col for col in best_result_features if col in _cat_cols]
 
         test_df = test_df[best_result_features + ["rating"]]  # type: ignore
-
     else:
         train_df, val_df, cat_cols = experiment_without_feat_engineering(
-            split_type=split_type
+            split_type=split_type, binary_target=binary_target
         )
         test_df = pd.read_csv(
             Path(DATA_DIR)
@@ -77,7 +85,9 @@ def set_lgb_datasets(
     full_train_df_encoded = encoder.fit_transform(full_train_df)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
-    test_df = binarize_target(test_df)
+    if binary_target:
+        test_df = binarize_target(test_df)
+
     test_df_encoded = encoder.transform(test_df)
 
     X_train = full_train_df_encoded.drop(columns=["rating"])
@@ -106,6 +116,7 @@ def train_lgb_model_and_evaluate_ranking_metrics(
     with_feat_engineering: bool = False,
     split_type: Literal["ts", "li"] = "ts",
     k_values: List[int] = [5, 10, 20],
+    binary_target: bool = True,
 ) -> Dict[int, Dict[str, float]]:
 
     if with_feat_engineering:
@@ -113,7 +124,7 @@ def train_lgb_model_and_evaluate_ranking_metrics(
     else:
         with open(
             Path(RESULTS_DIR)
-            / f"results_lgb_with_default_params_{split_type}"
+            / f"results_lgb_with_default_params_{split_type}_{'binary' if binary_target else 'regression'}"
             / "model.pkl",
             "rb",
         ) as f:
@@ -121,19 +132,22 @@ def train_lgb_model_and_evaluate_ranking_metrics(
         best_iteration = model_with_default_params.num_trees()
 
     with_feat_engineering_suffix = "with" if with_feat_engineering else "without"
+    binary_target_suffix = "binary" if binary_target else "regression"
     results_dir = (
         Path(RESULTS_DIR)
-        / f"results_lgb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}"
+        / f"results_lgb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}_{binary_target_suffix}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    train_data, test_data = set_lgb_datasets(split_type, with_feat_engineering)
+    train_data, test_data = set_lgb_datasets(
+        split_type, with_feat_engineering, binary_target
+    )
 
     model = lgb.train(
         {
             "n_estimators": best_iteration,
-            "objective": "binary",
-            "metric": "binary_logloss",
+            "objective": "binary" if binary_target else "regression",
+            "metric": "binary_logloss" if binary_target else "rmse",
         },
         train_data,
     )
@@ -165,17 +179,17 @@ def train_lgb_model_and_evaluate_ranking_metrics(
 
 if __name__ == "__main__":
     train_lgb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True, split_type="ts"
+        with_feat_engineering=True, split_type="ts", binary_target=True
     )
 
     train_lgb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False, split_type="ts"
+        with_feat_engineering=False, split_type="ts", binary_target=True
     )
 
     train_lgb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True, split_type="li"
+        with_feat_engineering=True, split_type="li", binary_target=True
     )
 
     train_lgb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False, split_type="li"
+        with_feat_engineering=False, split_type="li", binary_target=True
     )

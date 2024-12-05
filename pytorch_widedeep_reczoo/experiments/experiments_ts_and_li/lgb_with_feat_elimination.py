@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
 from pytorch_widedeep.utils import LabelEncoder
 
 from rec_tools.constants import RESULTS_DIR
@@ -17,6 +17,7 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
 def create_initial_datasets(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
+    binary_target: bool,
 ) -> Tuple[
     lgb.Dataset,
     lgb.Dataset,
@@ -26,7 +27,9 @@ def create_initial_datasets(
     pd.Series,
     List[str],
 ]:
-    train_df, val_df, cat_cols = experiment_with_feat_engineering(use_umap, split_type)
+    train_df, val_df, cat_cols = experiment_with_feat_engineering(
+        use_umap, split_type, binary_target
+    )
 
     encoder = LabelEncoder(columns_to_encode=cat_cols)
 
@@ -55,9 +58,10 @@ def create_initial_datasets(
 def run_lgb_feature_elimination(
     use_umap: Literal["st", "ch"],
     split_type: Literal["ts", "li"],
+    binary_target: bool,
 ) -> Dict[int, Dict[str, Any]]:
     train_data, val_data, X_train, X_val, y_train, y_val, cat_cols = (
-        create_initial_datasets(use_umap, split_type)
+        create_initial_datasets(use_umap, split_type, binary_target)
     )
 
     results = {}
@@ -65,8 +69,8 @@ def run_lgb_feature_elimination(
 
     params = {
         "num_iterations": 1000,
-        "objective": "binary",
-        "metric": "binary_logloss",
+        "objective": "binary" if binary_target else "regression",
+        "metric": "binary_logloss" if binary_target else "rmse",
         "verbose": -1,
     }
 
@@ -82,19 +86,30 @@ def run_lgb_feature_elimination(
             ],
         )
 
-        y_pred = (np.array(model.predict(X_val)) > 0.5).astype(int)
-
-        accuracy = accuracy_score(y_val, y_pred)
-        f1 = f1_score(y_val, y_pred)
-        val_loss = model.best_score["valid_0"]["binary_logloss"]
-
-        results[trial] = {
-            "features": current_features.copy(),
-            "acc": accuracy,
-            "f1": f1,
-            "val_loss": val_loss,
-            "best_iteration": model.best_iteration,
-        }
+        _y_pred = model.predict(X_val)
+        if binary_target:
+            y_pred = (np.array(_y_pred) > 0.5).astype(int)
+            accuracy = accuracy_score(y_val, y_pred)
+            f1 = f1_score(y_val, y_pred)
+            val_loss = model.best_score["valid_0"]["binary_logloss"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "acc": accuracy,
+                "f1": f1,
+                "val_loss": val_loss,
+                "best_iteration": model.best_iteration,
+            }
+        else:
+            y_pred = _y_pred  # type: ignore
+            rmse = root_mean_squared_error(y_val, y_pred)
+            # valid loss is the rmse, but we include it in the report for consistency
+            val_loss = model.best_score["valid_0"]["rmse"]
+            results[trial] = {
+                "features": current_features.copy(),
+                "rmse": rmse,
+                "val_loss": val_loss,
+                "best_iteration": model.best_iteration,
+            }
 
         importance = model.feature_importance(importance_type="split")
         feature_importance = pd.DataFrame(
@@ -128,14 +143,17 @@ def run_lgb_feature_elimination(
         trial += 1
 
         print("-" * 100)
-        print(
-            f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
-        )
+        if binary_target:
+            print(
+                f"Trial {trial} metrics: accuracy: {accuracy}, f1: {f1}, val_loss: {val_loss}"
+            )
+        else:
+            print(f"Trial {trial} metrics: rmse: {rmse}, val_loss: {val_loss}")
         print("-" * 100)
 
     results_dir = (
         Path(RESULTS_DIR)
-        / f"results_lgb_with_feature_elimination_{use_umap}_{split_type}"
+        / f"results_lgb_with_feature_elimination_{use_umap}_{split_type}_{'binary' if binary_target else 'regression'}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -147,5 +165,15 @@ def run_lgb_feature_elimination(
 
 
 if __name__ == "__main__":
-    results_ts = run_lgb_feature_elimination(use_umap="ch", split_type="ts")
-    results_li = run_lgb_feature_elimination(use_umap="ch", split_type="li")
+    results_ts = run_lgb_feature_elimination(
+        use_umap="ch", split_type="ts", binary_target=True
+    )
+    results_li = run_lgb_feature_elimination(
+        use_umap="ch", split_type="li", binary_target=True
+    )
+    results_ts_regression = run_lgb_feature_elimination(
+        use_umap="ch", split_type="ts", binary_target=False
+    )
+    results_li_regression = run_lgb_feature_elimination(
+        use_umap="ch", split_type="li", binary_target=False
+    )

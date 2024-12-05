@@ -160,7 +160,7 @@ def impute_categorical_cols(
 
 
 def experiment_without_feat_engineering(
-    split_type: Literal["ts", "li"] = "ts"
+    split_type: Literal["ts", "li"] = "ts", binary_target: bool = True
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
     split_dir = (
         TEMPORAL_MOVIELENS_SPLIT_DIR
@@ -184,8 +184,9 @@ def experiment_without_feat_engineering(
     train_df = train_df[cat_cols + ["rating"]]
     val_df = val_df[cat_cols + ["rating"]]
 
-    train_df = binarize_target(train_df)
-    val_df = binarize_target(val_df)
+    if binary_target:
+        train_df = binarize_target(train_df)
+        val_df = binarize_target(val_df)
 
     return train_df, val_df, cat_cols
 
@@ -193,13 +194,15 @@ def experiment_without_feat_engineering(
 def experiment_with_feat_engineering(
     use_umap: Literal["st", "ch"] = "st",
     split_type: Literal["ts", "li"] = "ts",
+    binary_target: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
     train_df, val_df = load_and_merge_features(
         split="train_val", use_umap=use_umap, split_type=split_type
     )
 
-    train_df = binarize_target(train_df)
-    val_df = binarize_target(val_df)
+    if binary_target:
+        train_df = binarize_target(train_df)
+        val_df = binarize_target(val_df)
 
     cat_cols = find_categorical_cols(train_df)
 
@@ -210,7 +213,7 @@ def experiment_with_feat_engineering(
 
 
 def experiment_for_catboost_with_text(
-    split_type: Literal["ts", "li"] = "ts"
+    split_type: Literal["ts", "li"] = "ts", binary_target: bool = True
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
     split_dir = (
         TEMPORAL_MOVIELENS_SPLIT_DIR
@@ -234,8 +237,9 @@ def experiment_for_catboost_with_text(
     train_df = train_df[cat_cols + ["rating"]]
     val_df = val_df[cat_cols + ["rating"]]
 
-    train_df = binarize_target(train_df)
-    val_df = binarize_target(val_df)
+    if binary_target:
+        train_df = binarize_target(train_df)
+        val_df = binarize_target(val_df)
 
     # Load all feature files
     movie_features_path = (

@@ -28,18 +28,19 @@ SELECT_FEATURES_ALGORITHM_SUFFIX_MAP = {
 
 
 def load_best_results_features_and_iteration(
+    split_type: Literal["ts", "li"],
+    binary_target: bool,
     select_features_algorithm: Literal[
         "RecursiveByLossFunctionChange",
         "RecursiveByShapValues",
         "RecursiveByPredictionValuesChange",
     ],
-    split_type: Literal["ts", "li"],
 ) -> Tuple[List[str], int]:
 
     fs_suffix = SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
     res_dir = (
         Path(RESULTS_DIR)
-        / f"results_ctb_with_native_feature_selection_ch_{split_type}_{fs_suffix}"
+        / f"results_ctb_ranking_metrics_{split_type}_{'binary' if binary_target else 'regression'}_{fs_suffix}"
     )
     with open(res_dir / "results.pkl", "rb") as f:
         results = pickle.load(f)
@@ -53,6 +54,7 @@ def load_best_results_features_and_iteration(
 def set_ctb_datasets(
     split_type: Literal["ts", "li"],
     with_feat_engineering: bool = False,
+    binary_target: bool = True,
     select_features_algorithm: (
         Literal[
             "RecursiveByLossFunctionChange",
@@ -64,18 +66,23 @@ def set_ctb_datasets(
 ) -> Tuple[ctb.Pool, ctb.Pool]:
     if with_feat_engineering:
         train_df, val_df = load_and_merge_features(
-            split="train_val", use_umap="ch", split_type=split_type
+            split="train_val",
+            use_umap="ch",
+            split_type=split_type,
         )
         test_df = load_and_merge_features(
-            split="test", use_umap="ch", split_type=split_type
+            split="test",
+            use_umap="ch",
+            split_type=split_type,
         )
         full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
         _cat_cols = find_categorical_cols(full_train_df)
         full_train_df = impute_categorical_cols(full_train_df, _cat_cols)
-        full_train_df = binarize_target(full_train_df)
+        if binary_target:
+            full_train_df = binarize_target(full_train_df)
         best_result_features, _ = load_best_results_features_and_iteration(
-            select_features_algorithm, split_type
+            split_type, binary_target, select_features_algorithm
         )
         full_train_df = full_train_df[best_result_features + ["rating"]]
         cat_cols = [col for col in best_result_features if col in _cat_cols]
@@ -84,7 +91,7 @@ def set_ctb_datasets(
 
     else:
         train_df, val_df, cat_cols = experiment_without_feat_engineering(
-            split_type=split_type
+            split_type=split_type, binary_target=binary_target
         )
         test_df = pd.read_csv(
             Path(DATA_DIR)
@@ -96,7 +103,8 @@ def set_ctb_datasets(
         full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
-    test_df = binarize_target(test_df)
+    if binary_target:
+        test_df = binarize_target(test_df)
 
     X_train = full_train_df.drop(columns=["rating"])
     y_train = full_train_df["rating"]
@@ -110,8 +118,9 @@ def set_ctb_datasets(
 
 
 def train_ctb_model_and_evaluate_ranking_metrics(
-    with_feat_engineering: bool = False,
     split_type: Literal["ts", "li"] = "ts",
+    with_feat_engineering: bool = False,
+    binary_target: bool = True,
     k_values: List[int] = [5, 10, 20],
     select_features_algorithm: (
         Literal[
@@ -125,12 +134,14 @@ def train_ctb_model_and_evaluate_ranking_metrics(
 
     if with_feat_engineering:
         _, best_iteration = load_best_results_features_and_iteration(
-            select_features_algorithm, split_type
+            split_type,
+            binary_target,
+            select_features_algorithm,
         )
     else:
         with open(
             Path(RESULTS_DIR)
-            / f"results_ctb_with_default_params_{split_type}"
+            / f"results_ctb_with_default_params_{split_type}_{'binary' if binary_target else 'regression'}"
             / "model.pkl",
             "rb",
         ) as f:
@@ -143,27 +154,31 @@ def train_ctb_model_and_evaluate_ranking_metrics(
         if select_features_algorithm
         else "nofs"
     )
+    binary_suffix = "binary" if binary_target else "regression"
     results_dir = (
         Path(RESULTS_DIR)
-        / f"results_ctb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}_{fs_suffix}"
+        / f"results_ctb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}_{fs_suffix}_{binary_suffix}"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
     train_data, test_data = set_ctb_datasets(
-        split_type, with_feat_engineering, select_features_algorithm
+        split_type, with_feat_engineering, binary_target, select_features_algorithm
     )
 
     model = ctb.train(
         pool=train_data,
         params={
             "iterations": best_iteration,
-            "loss_function": "Logloss",
-            "eval_metric": "Logloss",
+            "loss_function": "Logloss" if binary_target else "RMSE",
+            "eval_metric": "Logloss" if binary_target else "RMSE",
             "verbose": False,
         },
     )
 
-    y_pred = model.predict(test_data, prediction_type="Probability")[:, 1]
+    if binary_target:
+        y_pred = model.predict(test_data, prediction_type="Probability")[:, 1]
+    else:
+        y_pred = model.predict(test_data)
     y_test = test_data.get_label()
 
     results: Dict[int, Dict[str, float]] = {}
@@ -192,45 +207,47 @@ if __name__ == "__main__":
     train_ctb_model_and_evaluate_ranking_metrics(
         with_feat_engineering=True,
         split_type="ts",
-        select_features_algorithm="RecursiveByLossFunctionChange",
+        binary_target=True,
+        select_features_algorithm="RecursiveByShapValues",
     )
-
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="li",
-        select_features_algorithm="RecursiveByLossFunctionChange",
-    )
-
     train_ctb_model_and_evaluate_ranking_metrics(
         with_feat_engineering=True,
         split_type="ts",
+        binary_target=False,
         select_features_algorithm="RecursiveByShapValues",
     )
 
     train_ctb_model_and_evaluate_ranking_metrics(
         with_feat_engineering=True,
         split_type="li",
+        binary_target=True,
+        select_features_algorithm="RecursiveByShapValues",
+    )
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=True,
+        split_type="li",
+        binary_target=False,
         select_features_algorithm="RecursiveByShapValues",
     )
 
     train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
+        with_feat_engineering=False,
         split_type="ts",
-        select_features_algorithm="RecursiveByPredictionValuesChange",
+        binary_target=True,
     )
-
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="li",
-        select_features_algorithm="RecursiveByPredictionValuesChange",
-    )
-
     train_ctb_model_and_evaluate_ranking_metrics(
         with_feat_engineering=False,
         split_type="ts",
+        binary_target=False,
     )
 
     train_ctb_model_and_evaluate_ranking_metrics(
         with_feat_engineering=False,
         split_type="li",
+        binary_target=True,
+    )
+    train_ctb_model_and_evaluate_ranking_metrics(
+        with_feat_engineering=False,
+        split_type="li",
+        binary_target=False,
     )
