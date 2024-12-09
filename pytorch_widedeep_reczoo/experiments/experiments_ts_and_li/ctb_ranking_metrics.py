@@ -1,5 +1,6 @@
+import json
 import pickle
-from typing import Dict, List, Tuple, Literal
+from typing import Any, Dict, List, Tuple, Literal, cast
 from pathlib import Path
 
 import pandas as pd
@@ -20,87 +21,81 @@ from rec_tools.prepare_experiments.prepare_ts_or_li import (
     experiment_without_feat_engineering,
 )
 
-SELECT_FEATURES_ALGORITHM_SUFFIX_MAP = {
-    "RecursiveByPredictionValuesChange": "pvc",
-    "RecursiveByLossFunctionChange": "lfc",
-    "RecursiveByShapValues": "shap",
-}
 
+def best_experiment_name():
+    binary_results_dir = Path(RESULTS_DIR) / "binary_results"
+    regression_results_dir = Path(RESULTS_DIR) / "regression_results"
 
-def load_best_results_features_and_iteration(
-    split_type: Literal["ts", "li"],
-    binary_target: bool,
-    select_features_algorithm: Literal[
-        "RecursiveByLossFunctionChange",
-        "RecursiveByShapValues",
-        "RecursiveByPredictionValuesChange",
-    ],
-) -> Tuple[List[str], int]:
-
-    fs_suffix = SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
-    res_dir = (
-        Path(RESULTS_DIR)
-        / f"results_ctb_ranking_metrics_{split_type}_{'binary' if binary_target else 'regression'}_{fs_suffix}"
+    binary_results_df = pd.read_csv(binary_results_dir / "binary_metrics.csv")
+    regression_results_df = pd.read_csv(
+        regression_results_dir / "regression_metrics.csv"
     )
+    binary_results_df_ctb = binary_results_df[
+        binary_results_df.experiment.str.contains("ctb")
+    ]
+    regression_results_df_ctb = regression_results_df[
+        regression_results_df.experiment.str.contains("ctb")
+    ]
+
+    best_exp_name_dict = {}
+    for experiment_type in ["binary", "regression"]:
+        _df = (
+            binary_results_df_ctb
+            if experiment_type == "binary"
+            else regression_results_df_ctb
+        )
+        best_exp_name_dict[experiment_type] = {}
+        for split_type in ["ts", "li"]:
+            _split_type = f"_{split_type}_"
+            _df_split_type = _df[_df["experiment"].str.contains(_split_type)]
+            _df_split_type = _df_split_type.sort_values(by="val_loss", ascending=True)
+            best_exp_name_dict[experiment_type][split_type] = _df_split_type[
+                "experiment"
+            ].iloc[0]
+
+    return best_exp_name_dict
+
+
+def load_info_best_results_features_and_iteration(
+    experiment_name: str,
+) -> Tuple[List[str], int]:
+    res_dir = Path(RESULTS_DIR) / experiment_name
     with open(res_dir / "results.pkl", "rb") as f:
         results = pickle.load(f)
 
-    best_trial_features = results["features"]
-    best_iteration = results["best_iteration"]
+    best_trial = max(results, key=lambda x: -results[x]["val_loss"])
+    best_trial_features = results[best_trial]["features"]
+    best_iteration = results[best_trial]["best_iteration"]
 
     return best_trial_features, best_iteration
 
 
-def set_ctb_datasets(
+def load_info_params_with_hyperopt(experiment_name: str) -> Dict[str, Any]:
+    with open(
+        Path(RESULTS_DIR) / experiment_name / "results.json",
+        "r",
+    ) as f:
+        results = json.load(f)
+    return results[
+        "best_params"
+    ]  # TODO: change this so is consistent with the other ones (i.e. 'config')
+
+
+def set_ctb_datasets_without_feat_engineering(
     split_type: Literal["ts", "li"],
-    with_feat_engineering: bool = False,
     binary_target: bool = True,
-    select_features_algorithm: (
-        Literal[
-            "RecursiveByLossFunctionChange",
-            "RecursiveByShapValues",
-            "RecursiveByPredictionValuesChange",
-        ]
-        | None
-    ) = None,
 ) -> Tuple[ctb.Pool, ctb.Pool]:
-    if with_feat_engineering:
-        train_df, val_df = load_and_merge_features(
-            split="train_val",
-            use_umap="ch",
-            split_type=split_type,
-        )
-        test_df = load_and_merge_features(
-            split="test",
-            use_umap="ch",
-            split_type=split_type,
-        )
-        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
-        _cat_cols = find_categorical_cols(full_train_df)
-        full_train_df = impute_categorical_cols(full_train_df, _cat_cols)
-        if binary_target:
-            full_train_df = binarize_target(full_train_df)
-        best_result_features, _ = load_best_results_features_and_iteration(
-            split_type, binary_target, select_features_algorithm
-        )
-        full_train_df = full_train_df[best_result_features + ["rating"]]
-        cat_cols = [col for col in best_result_features if col in _cat_cols]
+    train_df, val_df, cat_cols = experiment_without_feat_engineering(
+        split_type=split_type, binary_target=binary_target
+    )
 
-        test_df = test_df[best_result_features + ["rating"]]  # type: ignore
+    test_df = pd.read_csv(
+        Path(DATA_DIR) / TRAIN_VAL_TEST_SPLITS_DIR / MOVIELENS_SPLITS_DIR / "test.csv"
+    )
+    test_df = test_df[train_df.columns]
 
-    else:
-        train_df, val_df, cat_cols = experiment_without_feat_engineering(
-            split_type=split_type, binary_target=binary_target
-        )
-        test_df = pd.read_csv(
-            Path(DATA_DIR)
-            / TRAIN_VAL_TEST_SPLITS_DIR
-            / MOVIELENS_SPLITS_DIR
-            / "test.csv"
-        )
-        test_df = test_df[train_df.columns]
-        full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+    full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
     if binary_target:
@@ -117,68 +112,109 @@ def set_ctb_datasets(
     return train_data, test_data
 
 
-def train_ctb_model_and_evaluate_ranking_metrics(
-    split_type: Literal["ts", "li"] = "ts",
-    with_feat_engineering: bool = False,
+def set_catboost_datasets_with_feat_engineering(
+    split_type: Literal["ts", "li"],
     binary_target: bool = True,
-    k_values: List[int] = [5, 10, 20],
-    select_features_algorithm: (
-        Literal[
-            "RecursiveByLossFunctionChange",
-            "RecursiveByShapValues",
-            "RecursiveByPredictionValuesChange",
-        ]
-        | None
-    ) = None,
-) -> Dict[int, Dict[str, float]]:
+    experiment_name: str | None = None,
+) -> Tuple[ctb.Pool, ctb.Pool]:
 
-    if with_feat_engineering:
-        _, best_iteration = load_best_results_features_and_iteration(
-            split_type,
-            binary_target,
-            select_features_algorithm,
+    train_df, val_df = load_and_merge_features(
+        split="train_val", use_umap="ch", split_type=split_type
+    )
+    test_df = load_and_merge_features(
+        split="test", use_umap="ch", split_type=split_type
+    )
+    full_train_df = pd.concat([train_df, val_df], ignore_index=True)
+    cat_cols = find_categorical_cols(full_train_df)
+
+    full_train_df = impute_categorical_cols(full_train_df, cat_cols)
+    if binary_target:
+        full_train_df = binarize_target(full_train_df)
+
+    if experiment_name is not None:
+        best_result_features, _ = load_info_best_results_features_and_iteration(
+            experiment_name
         )
     else:
+        best_result_features = [
+            c for c in full_train_df.columns.tolist() if c != "rating"
+        ]
+
+    full_train_df = full_train_df[best_result_features + ["rating"]]
+    cat_cols = [col for col in best_result_features if col in cat_cols]
+
+    test_df = test_df[best_result_features + ["rating"]]  # type: ignore
+    test_df = impute_categorical_cols(test_df, cat_cols)
+    if binary_target:
+        test_df = binarize_target(test_df)
+
+    X_train = full_train_df.drop(columns=["rating"])
+    y_train = full_train_df["rating"]
+    X_test = test_df.drop(columns=["rating"])
+    y_test = test_df["rating"]
+
+    train_data = ctb.Pool(data=X_train, label=y_train, cat_features=cat_cols)
+    test_data = ctb.Pool(data=X_test, label=y_test, cat_features=cat_cols)
+
+    return train_data, test_data
+
+
+def train_ctb_model_and_evaluate_ranking_metrics(
+    experiment_name: str,
+    with_feat_engineering: bool = False,
+    split_type: Literal["ts", "li"] = "ts",
+    k_values: List[int] = [5, 10, 20],
+    binary_target: bool = True,
+) -> Dict[int, Dict[str, float]]:
+
+    results_dir = Path(RESULTS_DIR) / "results_ctb_ranking_metrics"
+
+    params: Dict[str, Any] = {}
+    if with_feat_engineering:
+        if "with_feature_elimination" in experiment_name:
+            _, best_iteration = load_info_best_results_features_and_iteration(
+                experiment_name
+            )
+            params["iterations"] = best_iteration
+            train_data, test_data = set_catboost_datasets_with_feat_engineering(
+                split_type,
+                binary_target,
+                experiment_name,
+            )
+        else:  # it will be "hyperopt"
+            params = load_info_params_with_hyperopt(experiment_name)
+            train_data, test_data = set_catboost_datasets_with_feat_engineering(
+                split_type,
+                binary_target,
+            )
+    else:
         with open(
-            Path(RESULTS_DIR)
-            / f"results_ctb_with_default_params_{split_type}_{'binary' if binary_target else 'regression'}"
-            / "model.pkl",
+            Path(RESULTS_DIR) / experiment_name / "model.pkl",
             "rb",
         ) as f:
             model_with_default_params = pickle.load(f)
         best_iteration = model_with_default_params.tree_count_
+        params["iterations"] = best_iteration
+        train_data, test_data = set_ctb_datasets_without_feat_engineering(
+            split_type, binary_target
+        )
 
-    with_feat_engineering_suffix = "with" if with_feat_engineering else "without"
-    fs_suffix = (
-        SELECT_FEATURES_ALGORITHM_SUFFIX_MAP[select_features_algorithm]
-        if select_features_algorithm
-        else "nofs"
-    )
-    binary_suffix = "binary" if binary_target else "regression"
-    results_dir = (
-        Path(RESULTS_DIR)
-        / f"results_ctb_ranking_metrics_{split_type}_{with_feat_engineering_suffix}_{fs_suffix}_{binary_suffix}"
-    )
-    results_dir.mkdir(parents=True, exist_ok=True)
+    results_full_path = results_dir / f"{experiment_name}"
+    results_full_path.mkdir(parents=True, exist_ok=True)
 
-    train_data, test_data = set_ctb_datasets(
-        split_type, with_feat_engineering, binary_target, select_features_algorithm
-    )
+    params["loss_function"] = "Logloss" if binary_target else "RMSE"
+    params["eval_metric"] = "Logloss" if binary_target else "RMSE"
 
     model = ctb.train(
-        pool=train_data,
-        params={
-            "iterations": best_iteration,
-            "loss_function": "Logloss" if binary_target else "RMSE",
-            "eval_metric": "Logloss" if binary_target else "RMSE",
-            "verbose": False,
-        },
+        params=params,
+        dtrain=train_data,
     )
 
-    if binary_target:
-        y_pred = model.predict(test_data, prediction_type="Probability")[:, 1]
-    else:
-        y_pred = model.predict(test_data)
+    y_pred = (
+        model.predict(test_data, prediction_type="Probability")[:, 1]
+        if binary_target
+        else model.predict(test_data)
+    )
     y_test = test_data.get_label()
 
     results: Dict[int, Dict[str, float]] = {}
@@ -197,57 +233,73 @@ def train_ctb_model_and_evaluate_ranking_metrics(
         print(f"MAP@{k}: {test_map}")
         print(f"HR@{k}: {test_hr}")
 
-    with open(results_dir / "results.pkl", "wb") as f:
+    with open(results_full_path / "results.pkl", "wb") as f:
         pickle.dump(results, f)
 
     return results
 
 
 if __name__ == "__main__":
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="ts",
-        binary_target=True,
-        select_features_algorithm="RecursiveByShapValues",
-    )
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="ts",
-        binary_target=False,
-        select_features_algorithm="RecursiveByShapValues",
-    )
 
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="li",
-        binary_target=True,
-        select_features_algorithm="RecursiveByShapValues",
-    )
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=True,
-        split_type="li",
-        binary_target=False,
-        select_features_algorithm="RecursiveByShapValues",
-    )
+    SplitType = Literal["ts", "li"]
 
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False,
-        split_type="ts",
-        binary_target=True,
-    )
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False,
-        split_type="ts",
-        binary_target=False,
-    )
+    experiments_names = best_experiment_name()
+    # {
+    #     "binary": {
+    #         "ts": "results_ctb_with_feature_elimination_ch_ts_binary",
+    #         "li": "results_ctb_with_feature_elimination_ch_li_binary",
+    #     },
+    #     "regression": {
+    #         "ts": "results_ctb_with_feature_elimination_ch_ts_regression",
+    #         "li": "results_ctb_with_hyperopt_ch_li_regression",
+    #     },
+    # }
 
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False,
-        split_type="li",
-        binary_target=True,
-    )
-    train_ctb_model_and_evaluate_ranking_metrics(
-        with_feat_engineering=False,
-        split_type="li",
-        binary_target=False,
-    )
+    # with feature engineering
+    for experiment_type in ["binary", "regression"]:
+        for split_type in ["ts", "li"]:
+            print("-" * 100)
+            print(f"Experiment: {experiments_names[experiment_type][split_type]}")
+            print("-" * 100)
+            split_type_ = cast(SplitType, split_type)
+            experiment_name = experiments_names[experiment_type][split_type]
+            train_ctb_model_and_evaluate_ranking_metrics(
+                with_feat_engineering=True,
+                split_type=split_type_,
+                binary_target=experiment_type == "binary",
+                experiment_name=experiment_name,
+            )
+
+    # without feature engineering
+    default_params_experiments_names: Dict[str, Dict[str, str]] = {}
+    default_params_experiments_names["binary"] = {}
+    default_params_experiments_names["regression"] = {}
+    default_params_experiments_names["binary"][
+        "ts"
+    ] = "results_ctb_with_default_params_ts_binary"
+    default_params_experiments_names["regression"][
+        "ts"
+    ] = "results_ctb_with_default_params_ts_regression"
+    default_params_experiments_names["binary"][
+        "li"
+    ] = "results_ctb_with_default_params_li_binary"
+    default_params_experiments_names["regression"][
+        "li"
+    ] = "results_ctb_with_default_params_li_regression"
+    for experiment_type in ["binary", "regression"]:
+        for split_type in ["ts", "li"]:
+            print("-" * 100)
+            print(
+                f"Experiment: {default_params_experiments_names[experiment_type][split_type]}"
+            )
+            print("-" * 100)
+            split_type_ = cast(SplitType, split_type)
+            experiment_name = default_params_experiments_names[experiment_type][
+                split_type
+            ]
+            train_ctb_model_and_evaluate_ranking_metrics(
+                with_feat_engineering=False,
+                split_type=split_type_,
+                binary_target=True,
+                experiment_name=experiment_name,
+            )
