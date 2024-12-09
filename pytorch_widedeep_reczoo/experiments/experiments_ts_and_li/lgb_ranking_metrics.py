@@ -120,7 +120,9 @@ def train_lgb_model_and_evaluate_ranking_metrics(
 ) -> Dict[int, Dict[str, float]]:
 
     if with_feat_engineering:
-        _, best_iteration = load_best_results_features_and_iteration(split_type)
+        _, best_iteration = load_best_results_features_and_iteration(
+            split_type, binary_target
+        )
     else:
         with open(
             Path(RESULTS_DIR)

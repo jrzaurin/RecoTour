@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from surprise import SVD, Reader, Dataset
-from sklearn.metrics import f1_score, accuracy_score, root_mean_squared_error
+from sklearn.metrics import f1_score, log_loss, accuracy_score, root_mean_squared_error
 
 from rec_tools.constants import RESULTS_DIR
 from rec_tools.prepare_experiments.prepare_ts_or_li import (
@@ -39,12 +39,15 @@ def train_svd(
         val_pred_labels = (np.array(val_predictions) > 0.5).astype(int)
         acc = accuracy_score(val_df["rating"], val_pred_labels)
         f1 = f1_score(val_df["rating"], val_pred_labels)
+        val_loss = log_loss(val_df["rating"], val_predictions)
         metrics = {
             "accuracy": acc,
             "f1": f1,
+            "val_loss": val_loss,
         }
         print(f"SVD Accuracy: {acc:.4f}")
         print(f"SVD F1: {f1:.4f}")
+        print(f"SVD Val Loss: {val_loss:.4f}")
     else:
         rmse = root_mean_squared_error(val_df["rating"], val_predictions)
         metrics = {"rmse": rmse}

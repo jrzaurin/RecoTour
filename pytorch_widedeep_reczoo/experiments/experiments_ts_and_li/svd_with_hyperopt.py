@@ -130,13 +130,16 @@ def train_svd_with_hyperopt(
         val_pred_labels = (np.array(val_predictions) > 0.5).astype(int)
         acc = accuracy_score(val_df["rating"], val_pred_labels)
         f1 = f1_score(val_df["rating"], val_pred_labels)
+        val_loss = log_loss(val_df["rating"], val_predictions)
         metrics = {
             "best_params": tuner.best,
             "accuracy": acc,
             "f1": f1,
+            "val_loss": val_loss,
         }
         print(f"SVD Accuracy: {acc:.4f}")
         print(f"SVD F1: {f1:.4f}")
+        print(f"SVD Val Loss: {val_loss:.4f}")
     else:
         rmse = root_mean_squared_error(val_df["rating"], val_predictions)
         metrics = {
