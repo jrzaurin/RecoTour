@@ -5,8 +5,6 @@
 import pickle
 from typing import Dict, List, Tuple
 from pathlib import Path
-from functools import partial
-from multiprocessing import Pool, cpu_count
 
 import pandas as pd
 
@@ -34,47 +32,17 @@ def load_train_and_test_datasets() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return train_df, test_df
 
 
-def process_single_user(
-    user_id: int,
-    *,
-    train_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    use_mean_rating: bool,
+def item_popularity(
+    train_df: pd.DataFrame, use_mean_rating: bool = False
 ) -> pd.DataFrame:
-    user_test_items = test_df[test_df["user_id"] == user_id]
-    items_in_train = train_df[train_df["item_id"].isin(user_test_items["item_id"])]
-
     items_popularity = (
-        items_in_train.groupby("item_id")["rating"]
+        train_df.groupby("item_id")["rating"]
         .agg("mean" if use_mean_rating else "count")
         .reset_index()
     )
     items_popularity.rename(columns={"rating": "popularity"}, inplace=True)
 
-    return user_test_items.merge(items_popularity, on="item_id", how="left")
-
-
-def most_popular_predictions(
-    train_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    use_mean_rating: bool = False,
-    n_cpus: int | None = None,
-) -> pd.DataFrame:
-    process_user = partial(
-        process_single_user,
-        train_df=train_df,
-        test_df=test_df,
-        use_mean_rating=use_mean_rating,
-    )
-
-    n_cpus = n_cpus or cpu_count()
-    with Pool(n_cpus) as pool:
-        predictions = pool.map(process_user, test_df["user_id"].unique())
-
-    final_df = pd.concat(predictions, ignore_index=True)
-    final_df = binarize_target(final_df)
-
-    return final_df[["user_id", "item_id", "rating", "popularity"]]
+    return items_popularity
 
 
 def mp_ranking_metrics(
@@ -83,13 +51,21 @@ def mp_ranking_metrics(
 ) -> Dict[int, Dict[str, float]]:
 
     train_df, test_df = load_train_and_test_datasets()
-    predictions = most_popular_predictions(train_df, test_df, use_mean_rating)
+    test_df = binarize_target(test_df)
 
-    results_dir = Path(RESULTS_DIR) / "results_most_popular_ranking_metrics"
+    items_popularity = item_popularity(train_df, use_mean_rating)
+    results_dir = (
+        Path(RESULTS_DIR)
+        / "results_most_popular_ranking_metrics"
+        / f"results_mp_{'mean' if use_mean_rating else 'count'}"
+    )
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    y_test = predictions["rating"].values
-    y_pred = predictions["popularity"].values
+    test_df = test_df.merge(items_popularity, on="item_id", how="left")
+    test_df["popularity"].fillna(0, inplace=True)
+
+    y_test = test_df["rating"].values
+    y_pred = test_df["popularity"].values
 
     results: Dict[int, Dict[str, float]] = {}
     for k in k_values:
@@ -114,4 +90,5 @@ def mp_ranking_metrics(
 
 
 if __name__ == "__main__":
-    mp_ranking_metrics()
+    mp_ranking_metrics(use_mean_rating=False)
+    mp_ranking_metrics(use_mean_rating=True)

@@ -117,8 +117,7 @@ def set_lgb_datasets_without_feat_engineering(
     full_train_df_encoded = encoder.fit_transform(full_train_df)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
-    if binary_target:
-        test_df = binarize_target(test_df)
+    test_df = binarize_target(test_df)
     test_df_encoded = encoder.transform(test_df)
 
     X_train = full_train_df_encoded.drop(columns=["rating"])
@@ -180,8 +179,7 @@ def set_lgb_datasets_with_feat_engineering(
     full_train_df_encoded = encoder.fit_transform(full_train_df)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
-    if binary_target:
-        test_df = binarize_target(test_df)
+    test_df = binarize_target(test_df)
 
     test_df_encoded = encoder.transform(test_df)
 

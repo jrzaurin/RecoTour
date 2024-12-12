@@ -65,9 +65,8 @@ def load_info_best_results_features_and_iteration(
 
     best_trial = max(results, key=lambda x: -results[x]["val_loss"])
     best_trial_features = results[best_trial]["features"]
-    best_iteration = results[best_trial]["best_iteration"]
 
-    return best_trial_features, best_iteration
+    return best_trial_features, best_trial
 
 
 def load_info_params_with_hyperopt(experiment_name: str) -> Dict[str, Any]:
@@ -98,8 +97,7 @@ def set_ctb_datasets_without_feat_engineering(
     full_train_df = pd.concat([train_df, val_df], ignore_index=True)
 
     test_df = impute_categorical_cols(test_df, cat_cols)
-    if binary_target:
-        test_df = binarize_target(test_df)
+    test_df = binarize_target(test_df)
 
     X_train = full_train_df.drop(columns=["rating"])
     y_train = full_train_df["rating"]
@@ -112,7 +110,7 @@ def set_ctb_datasets_without_feat_engineering(
     return train_data, test_data
 
 
-def set_catboost_datasets_with_feat_engineering(
+def set_ctb_datasets_with_feat_engineering(
     split_type: Literal["ts", "li"],
     binary_target: bool = True,
     experiment_name: str | None = None,
@@ -145,8 +143,7 @@ def set_catboost_datasets_with_feat_engineering(
 
     test_df = test_df[best_result_features + ["rating"]]  # type: ignore
     test_df = impute_categorical_cols(test_df, cat_cols)
-    if binary_target:
-        test_df = binarize_target(test_df)
+    test_df = binarize_target(test_df)
 
     X_train = full_train_df.drop(columns=["rating"])
     y_train = full_train_df["rating"]
@@ -176,14 +173,14 @@ def train_ctb_model_and_evaluate_ranking_metrics(
                 experiment_name
             )
             params["iterations"] = best_iteration
-            train_data, test_data = set_catboost_datasets_with_feat_engineering(
+            train_data, test_data = set_ctb_datasets_with_feat_engineering(
                 split_type,
                 binary_target,
                 experiment_name,
             )
         else:  # it will be "hyperopt"
             params = load_info_params_with_hyperopt(experiment_name)
-            train_data, test_data = set_catboost_datasets_with_feat_engineering(
+            train_data, test_data = set_ctb_datasets_with_feat_engineering(
                 split_type,
                 binary_target,
             )
@@ -204,6 +201,7 @@ def train_ctb_model_and_evaluate_ranking_metrics(
 
     params["loss_function"] = "Logloss" if binary_target else "RMSE"
     params["eval_metric"] = "Logloss" if binary_target else "RMSE"
+    params["allow_writing_files"] = False
 
     model = ctb.train(
         params=params,
