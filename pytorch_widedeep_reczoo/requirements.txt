@@ -14,4 +14,4 @@ openai==1.54.3
 cohere==5.11.3
 sentence-transformers==3.2.1
 transformers==4.46.0
-chromadb == "0.5.18"
+chromadb == 0.5.18
